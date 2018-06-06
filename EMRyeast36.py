@@ -512,20 +512,23 @@ def bfCellMorphCleanup(mcl, showProgress,
             # otherwise, remaining minor negative curvatures are likely bright-
             # field artifacts. Take convex hull of each instead.
             else:
+                #check for second largest cell
+                second = np.where(
+                        sizes==np.max(np.delete(sizes,largest-1)))[0][0]+1
                 cleanup = np.zeros(newCells.shape,dtype=newCells.dtype)
                 subCellProps = regionprops(newCells)
-                for subCell in range(2):
-                    subBox = subCellProps[subCell].bbox
-                    sub_cvx_hull = subCellProps[subCell].convex_image
+                for subCell in [second,largest]:
+                    subBox = subCellProps[subCell-1].bbox
+                    sub_cvx_hull = subCellProps[subCell-1].convex_image
                     cleanup[subBox[0]:subBox[2],
-                            subBox[1]:subBox[3]][sub_cvx_hull==1] = subCell+1
+                            subBox[1]:subBox[3]][sub_cvx_hull==1] = subCell
                 # recut neck to assign neck to largest cell
                 cleanup[rr,cc]=largest
                 # write to cleanedMcl with -idx for bud cell
                 cleanedMcl[box[0]-1:box[2]+1,
                            box[1]-1:box[3]+1][cleanup==largest]=cellIdx
                 cleanedMcl[box[0]-1:box[2]+1,
-                           box[1]-1:box[3]+1][cleanup==largest%2+1]=-cellIdx
+                           box[1]-1:box[3]+1][cleanup==second]=-cellIdx
         if showProgress:
             dispText = ('processing cell outlines: progress',
                         '='*int(20*(cell+1)/nCells),
@@ -535,16 +538,17 @@ def bfCellMorphCleanup(mcl, showProgress,
             sys.stdout.flush()
     return cleanedMcl
 
-def labelCortex_mcl(cleanedMcl, cortexWidth):
+def labelCortex_mcl(masterCellLabel, cortexWidth):
     '''
-    Generate labeled mask of cell cortical region, using cleanedMcl (with 
+    Generate labeled mask of cell cortical region, using masterCellLabel (with 
     numbered cells, buds as -1*[mother_label])
     '''
-    erosion = ndimage.binary_erosion(cleanedMcl,morph.disk(cortexWidth))
-    cortexMcl = cleanedMcl - np.multiply(erosion.astype(int), cleanedMcl)
+    erosion = ndimage.binary_erosion(masterCellLabel,morph.disk(cortexWidth))
+    cortexMcl = (masterCellLabel 
+                 - np.multiply(erosion.astype(int), masterCellLabel))
     return cortexMcl
 
-def labelMaxproj(cleanedMcl, image, mkrChannel):
+def labelMaxproj(masterCellLabel, image, mkrChannel):
     '''
     Early version of colocalization marker label;
     uses Otsu's threshold of maximum projection of marker stack; assumes 
@@ -558,7 +562,7 @@ def labelMaxproj(cleanedMcl, image, mkrChannel):
     mkrOtsu = ndimage.binary_opening(mkrOtsu)
     mkrOtsu = ndimage.binary_closing(mkrOtsu)
     mkrMcl = np.zeros(mkrOtsu.shape,dtype='int16')
-    mkrMcl[mkrOtsu] = cleanedMcl[mkrOtsu]
+    mkrMcl[mkrOtsu] = masterCellLabel[mkrOtsu]
     return mkrMcl
 
 def subtract_labelMcl(labelMcl_one, labelMcl_two):
@@ -566,7 +570,12 @@ def subtract_labelMcl(labelMcl_one, labelMcl_two):
     subtractedMcl[labelMcl_one==labelMcl_two] = 0
     return subtractedMcl
 
-def buffer_outlines(masterCellLabel, bufferSize):
+def merge_labelMcl(labelMcl_one, labelMcl_two):
+    mergedMcl = np.array(labelMcl_one,dtype=labelMcl_one.dtype)
+    mergedMcl[labelMcl_one == 0] = labelMcl_two[labelMcl_one == 0]
+    return mergedMcl
+
+def buffer_mcl(masterCellLabel, bufferSize):
     '''
     add a buffer to cells on the masterCellLabel to compensate for minor errors
     in registration between brightfield derived outlines and fluorescence
@@ -635,6 +644,7 @@ def buffer_outlines(masterCellLabel, bufferSize):
     labeledBuffer[masterCellLabel != 0] = 0
     return labeledBuffer
 
+
 def measure_cells(primaryImage, masterCellLabel, refMclList, refMclNames,
                   imageName, expID, startIdx):
     '''
@@ -658,7 +668,7 @@ def measure_cells(primaryImage, masterCellLabel, refMclList, refMclNames,
     '''
     #testing values for script-mode
     primaryImage = dvImage[1,3,:,:]
-    masterCellLabel = cleanedMcl
+    
     refMclList = [cortexMcl,golgiMcl,cortexMinusGolgiMcl]
     refMclNames = ['cortexMcl','golgiMcl','cortexMinusGolgiMcl']
     expID = 'xx0001'
@@ -693,12 +703,32 @@ for z in range(nZslices):
     bwCellZstack[z,:,:] = correctBFanomaly(bwCellZstack[z,:,:],
                                            bfAnomalyShiftVector)
 #identify and merge cell borders
-mcl = cellsFromZstack(bwCellZstack,showProgress=True)[0]
-nCells = int(mcl.max())
-cleanedMcl = bfCellMorphCleanup(mcl, showProgress=True,)
-cortexMcl = labelCortex_mcl(cleanedMcl,cortexWidth=8)
-golgiMcl = labelMaxproj(cleanedMcl,image=dvImage,mkrChannel=0)
+rawMcl = cellsFromZstack(bwCellZstack,showProgress=True)[0]
+masterCellLabel = bfCellMorphCleanup(rawMcl, showProgress=True,)
+
+#generate masks (with mcl consistent labels)
+print('\ngenerating measurement masks')
+cortexMcl = labelCortex_mcl(masterCellLabel,cortexWidth=8)
+buffer = buffer_mcl(masterCellLabel, bufferSize=5)
+masterCellLabelBuffered = merge_labelMcl(masterCellLabel, buffer)
+cortexMclBuffered = merge_labelMcl(cortexMcl, buffer)
+golgiMcl = labelMaxproj(masterCellLabelBuffered,image=dvImage,mkrChannel=0)
 cortexMinusGolgiMcl = subtract_labelMcl(cortexMcl,golgiMcl)
+cortexBufferedMinusGolgi = subtract_labelMcl(cortexMclBuffered,golgiMcl)
+
+#save test image
+golgiSlice = dvImage[0,3,:,:]
+art1Slice = dvImage[1,3,:,:]
+bfSlice = dvImage[2,3,:,:]
+testImage = mergeForTiff([golgiSlice,
+                          art1Slice,
+                          masterCellLabel,
+                          masterCellLabelBuffered,
+                          cortexMcl,
+                          cortexMclBuffered,
+                          cortexMinusGolgiMcl])
+tifffile.imsave(folderPath+'test.tiff',testImage)
+
 
 
 '''
