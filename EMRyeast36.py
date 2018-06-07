@@ -6,7 +6,7 @@ adapted for python 3.6
 contains endocytosis profiling modules (vacmorph, vacmorph advanced) -not yet 
     tested
 extends methods to quantify flourescence localization against two markers
-    A) higher precision cortext localization from bright field image
+    A) higher precision cortex localization from bright field image
     B) punctate RFP colocalization marker (tested with mCh-Sec7)
     and evaluate punctate, membrane coloaclization (tested with Art1-mNG)
 """
@@ -645,44 +645,118 @@ def buffer_mcl(masterCellLabel, bufferSize):
     return labeledBuffer
 
 
-def measure_cells(primaryImage, masterCellLabel, refMclList, refMclNames,
-                  imageName, expID, startIdx):
+def measure_cells(primaryImage, masterCellLabel, refMclDict,
+                  imageName, expID, startIdx,
+                  globalMin, globalMax, showProgress):
     '''
     measurement function
     measures fluorescence intensity in the primaryImage for each cell in the 
     masterCellLabel image, and measures subcellular fluorescence as specified
-    in any number of refMcls specified in the refMclList and refMclNames
+    in any number of refMcls specified in the refMclDict
     
-    primary image is a single z-section fluorescence image
+    primary image is a dictionary consisting of the name of the image, 
+    (ie, Art1-mNG) and a single z-section fluorescence image. The name should 
+    not change across an experiment (ie, don't use Art1-mNG for one set of 
+    images and Art1(K486R)-mNG for another)
     
     masterCellLabel/refMcl format is an extension of the 
     skdimage.measure.regionprops labeled image; background regions are 0, each 
     cell is a unique ascending integer. Mother/bud pairs are positive/negative
     respectively. refMcl's should have the same numbering scheme as the 
-    masterCellLabel.
+    masterCellLabel. refMclDict is a standard dictionary with the names of each
+    refMcl to be used.
+    
+    Images are rescaled to experiment wide min,max values; background is
+    the modal fluorescence intensity after binning into 256 bins between global
+    min and max.
     
     Outputs to a list of dictionaries for easy import into pandas; optionally 
     provide imageName and expID to populate these values. For experiment wide
     indexing, provide startIdx to continue labeling cells sequentially across
     the entire experiment.
     '''
-    #testing values for script-mode
-    primaryImage = dvImage[1,3,:,:]
-    
-    refMclList = [cortexMcl,golgiMcl,cortexMinusGolgiMcl]
-    refMclNames = ['cortexMcl','golgiMcl','cortexMinusGolgiMcl']
-    expID = 'xx0001'
-    
+
+    results = []
     nCells = np.max(masterCellLabel)
+    #unpack names
+    fluorName = str(*primaryImage)
+    fluorImage = primaryImage[fluorName]
+    fluorScaled = (fluorImage.astype('float')-globalMin)/(globalMax-globalMin)
+    flatScaleduint8 = np.ndarray.flatten((fluorScaled*255).astype('uint8'))
+    bkg = (sp.stats.mode(flatScaleduint8).mode.astype('float'))/255
+    fluorBkgCorr = fluorScaled-bkg
+    refNames = [key for key in refMclDict]
+    #measurment loop
     for cellidx in range(nCells):
-        #measure things
-        a = 1
-    return #stuff
+        cellID = cellidx + 1
+        # write image specific identifiers
+        measurements = {'imageName':imageName, 'expID':expID}
+        # write experiment wide unique index
+        measurements['index'] = startIdx + cellidx
+        # define basic cell wide measurements
+        totalIntDen = (fluorBkgCorr[np.abs(masterCellLabel) == cellID]).sum()
+        totalArea = (np.abs(masterCellLabel) == cellID).sum()
+        totalBrightness = totalIntDen / totalArea
+        # measure fluorescence at bud, if present
+        if -cellID in masterCellLabel:
+            budFound = True
+            budIntDen = (fluorBkgCorr[masterCellLabel == -cellID]).sum()
+            budArea = (masterCellLabel == -cellID).sum()
+            budBrightness = budIntDen / budArea
+        else:
+            budFound = False
+            budIntDen = budArea = budBrightness = np.nan
+        # measure fluorescen at masks
+        for refKey in refNames:
+            refMcl = refMclDict[refKey]
+            refIntDen = (fluorBkgCorr[np.abs(refMcl) == cellID]).sum()
+            refArea = np.sum(np.abs(refMcl) == cellID)
+            if refArea != 0:
+                refBrightness = refIntDen / refArea
+            else:
+                refBrightness = 0
+            if budFound:
+                budrefIntDen = (fluorBkgCorr[refMcl == cellID]).sum()
+                budrefArea = (refMcl == -cellID).sum()
+                if budrefArea != 0:
+                    budrefBrightness = budrefIntDen / budrefArea
+                else:
+                    budrefBrightness = 0
+            else:
+                budrefIntDen = budrefArea = budrefBrightness = np.nan
+            measurements[fluorName + '_intDensity_at_' + refKey] = refIntDen
+            measurements[refKey + '_area'] = refArea
+            measurements[fluorName + '_brightness_at_' + refKey] = (
+                    refBrightness)
+            measurements['bud_' + fluorName + '_intDensity_at_' + refKey] = (
+                    budrefIntDen)
+            measurements['bud_' + refKey + '_area'] = budrefArea
+            measurements['bud_' + fluorName + '_brightness_at_' + refKey] = (
+                    budrefBrightness)
+            measurements['total_' + fluorName + '_intDensity'] = totalIntDen
+        measurements['total_cell_area'] = totalArea
+        measurements['total_' + fluorName + '_brightness'] = totalBrightness
+        measurements['bud_' + fluorName + '_intDensity'] = budIntDen
+        measurements['bud_area'] = budArea
+        measurements['bud_' + fluorName + '_brightness'] = budBrightness
+        results.append(measurements)
+        if showProgress:
+            dispText = ('measuring: progress',
+                        '='*int(20*(cellID)/nCells),
+                        int(100*(cellID)/nCells))
+            sys.stdout.write('\r')
+            sys.stdout.write("%s:[%-20s] %d%%" % dispText)
+            sys.stdout.flush()
+    nextStartIndex = nCells    
+    return results, nextStartIndex
     
     
 '''
 below: script for developing new Art1 localization measurements.
 '''
+
+
+
 folderPath = ("C:/Users/elgui/Documents/Emr Lab Post Doc/microscopy/"
               "/2018-05-15_YEG280_exposure_tests/")
 imageName = "YEG280_SCD_mCh100T25ms_mNG100T250ms-06_R3D_D3D.dv"
@@ -716,6 +790,19 @@ golgiMcl = labelMaxproj(masterCellLabelBuffered,image=dvImage,mkrChannel=0)
 cortexMinusGolgiMcl = subtract_labelMcl(cortexMcl,golgiMcl)
 cortexBufferedMinusGolgi = subtract_labelMcl(cortexMclBuffered,golgiMcl)
 
+#testing values for script-mode measure_cells()
+primaryImage = {'Art1-mNG':dvImage[1,3,:,:]}
+
+refMclDict = {'cortex(buffered)':cortexMclBuffered,
+              'golgi':golgiMcl,
+              'nonGolgicortex(buffered)':cortexBufferedMinusGolgi
+              }
+expID = 'xx0001'
+stashedMcl = np.copy(masterCellLabel)
+masterCellLabel = np.copy(masterCellLabelBuffered)
+
+
+'''
 #save test image
 golgiSlice = dvImage[0,3,:,:]
 art1Slice = dvImage[1,3,:,:]
@@ -724,11 +811,11 @@ testImage = mergeForTiff([golgiSlice,
                           art1Slice,
                           masterCellLabel,
                           masterCellLabelBuffered,
-                          cortexMcl,
                           cortexMclBuffered,
-                          cortexMinusGolgiMcl])
+                          cortexBufferedMinusGolgi,
+                          golgiMcl])
 tifffile.imsave(folderPath+'test.tiff',testImage)
-
+'''
 
 
 '''
