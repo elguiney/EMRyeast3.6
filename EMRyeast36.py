@@ -235,14 +235,38 @@ def mergeForTiff(imageList):
     expects a list like [img1,img2,img3]
     '''
     imageArrayList = [np.array(img) for img in imageList]
-    image16bit = [(255*(img.astype(float)-img.min())/
-                   (img.max()-img.min())).astype('uint8')
-                    for img in imageArrayList]
-    nRows = np.shape(image16bit[0])[0]
-    nCols = np.shape(image16bit[0])[1]
+    image8bit = [img.astype(float)-img.min()
+                 for img in imageArrayList]
+    image8bitb = []
+    for img in image8bit:
+        if img.max() != 0:
+            img = (img*(255/img.max())).astype('uint8')
+        else:
+            img = img.astype('uint8')
+        image8bitb.append(img)
+    nRows = np.shape(image8bit[0])[0]
+    nCols = np.shape(image8bit[0])[1]
     tiffStack = np.concatenate([img.reshape(1,nRows,nCols)
-                                for img in image16bit])
+                                for img in image8bitb])
     return tiffStack
+
+def mergeForImshow(imageList):
+    imageArrayList = [np.array(img) for img in imageList]
+    image8bit = [img.astype(float)-img.min()
+                 for img in imageArrayList]
+    image8bitb = []
+    for img in image8bit:
+        if img.max() != 0:
+            img = (img*(255/img.max())).astype('uint8')
+        else:
+            img = img.astype('uint8')
+        image8bitb.append(img)
+    nRows = np.shape(image8bit[0])[0]
+    nCols = np.shape(image8bit[0])[1]
+    imshowStack = np.concatenate([img.reshape(nRows,nCols,1)
+                                  for img in image8bitb], axis=2)
+    return imshowStack
+                        
 
 def correctBFanomaly(binaryCellMask, shiftVector):
     ''' correct for systematic optical bias between brightfield image and
@@ -684,7 +708,7 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
     fluorScaled = (fluorImage.astype('float')-globalMin)/(globalMax-globalMin)
     flatScaleduint8 = np.ndarray.flatten((fluorScaled*255).astype('uint8'))
     bkg = (sp.stats.mode(flatScaleduint8).mode.astype('float'))/255
-    fluorBkgCorr = fluorScaled-bkg
+    fluorBkgCorr = 1000*(fluorScaled-bkg)
     refNames = [key for key in refMclDict]
     #measurment loop
     for cellidx in range(nCells):
@@ -750,6 +774,10 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
     nextStartIndex = nCells    
     return results, nextStartIndex
     
+#prepare qc image
+#def prep_qcImage(mainFluorescence, refFluorescence, qcMclList, startIdx):
+#    cellProps = regionprops()
+    
     
 '''
 below: script for developing new Art1 localization measurements.
@@ -802,7 +830,7 @@ stashedMcl = np.copy(masterCellLabel)
 masterCellLabel = np.copy(masterCellLabelBuffered)
 
 
-'''
+''
 #save test image
 golgiSlice = dvImage[0,3,:,:]
 art1Slice = dvImage[1,3,:,:]
@@ -815,7 +843,7 @@ testImage = mergeForTiff([golgiSlice,
                           cortexBufferedMinusGolgi,
                           golgiMcl])
 tifffile.imsave(folderPath+'test.tiff',testImage)
-'''
+''
 
 
 '''
