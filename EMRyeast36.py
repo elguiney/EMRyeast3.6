@@ -775,9 +775,34 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
     return results, nextStartIndex
     
 #prepare qc image
-def prep_qcImage(mainFluorescence, refFluorescence, qcMclList, startIdx):
-    cellProps = regionprops()
+def prep_qcImage(greenFluor, redFluor, qcMclList, startIdx, scalingFactors):
+    rgbList=[0,0,0]
+    ySize,xSize = greenFluor.shape
+    mask_one = qcMclList[0].astype('bool')
+    mask_one_edge = mask_one ^ ndimage.binary_erosion(mask_one)
+    mask_two = qcMclList[1].astype('bool')
+    mask_two_edge = mask_two ^ ndimage.binary_erosion(mask_two)
+    blue = np.zeros(greenFluor.shape)
+    blue[mask_one_edge + mask_two_edge] = 0.9
+    blue = blue.reshape(ySize,xSize,1)
+    for idx in range(2):
+        fluor = [redFluor,greenFluor][idx]
+        fluor = fluor.astype('float')
+        scaled = ((fluor-fluor.min()) 
+                  / (scalingFactors[idx]*fluor.max()-fluor.min()))
+        scaled[scaled>1] = 1
+        scaled = scaled.reshape(ySize,xSize,1)
+        rgbList[idx] = scaled
+    rgbList[2] = blue
+    rgbList[0][mask_one_edge.reshape(ySize,xSize,1)]=1
+    rgbList[0][mask_two_edge.reshape(ySize,xSize,1)]=1
+    rgbList[1][mask_two_edge.reshape(ySize,xSize,1)]=1
+    rgb = np.concatenate(rgbList, axis=2)
+    return(rgb)
+            
+    #cellProps = regionprops()
     
+
     
 '''
 below: script for developing new Art1 localization measurements.
@@ -810,7 +835,7 @@ masterCellLabel = bfCellMorphCleanup(rawMcl, showProgress=True,)
 
 #generate masks (with mcl consistent labels)
 #print('\ngenerating measurement masks')
-cortexMcl = labelCortex_mcl(masterCellLabel,cortexWidth=8)
+cortexMcl = labelCortex_mcl(masterCellLabel,cortexWidth=10)
 buffer = buffer_mcl(masterCellLabel, bufferSize=5, showProgress=True)
 
 #combine masks
@@ -839,7 +864,23 @@ results,startIdx = measure_cells(primaryImage, masterCellLabel, refMclDict,
                                  imageName, expID, startIdx,
                                  globalMin, globalMax, showProgress=True)
 
-refImage = dvImage[0,3,:,:]
+
+scalingFactors = [0.3,0.3]
+grnScl = 0.4
+greenFluor = dvImage[1,3,:,:].astype(float)
+redScl = 0.4
+redFluor = np.amax(dvImage[0,:,:,:],axis=0).astype(float)
+qcMclList = [cortexBufferedMinusGolgi,golgiMcl]
+
+rgb = prep_qcImage(greenFluor, redFluor, qcMclList, startIdx, scalingFactors)
+plt.imshow(rgb)
+#greenFluor = (greenFluor-greenFluor.min())/(grnScl*greenFluor.max()-greenFluor.min())
+#greenInv = -1*(greenFluor-1)
+#greenFluor[greenFluor>1]=1
+#redFluor = (redFluor-redFluor.min())/(redScl*redFluor.max()-redFluor.min())
+#redFluor[redFluor>1]=1
+#rgb = np.concatenate([img.reshape(1920,1920,1) for img in [redFluor,greenFluor,]],axis=2)
+#plt.imshow(rgb)
 '''
 #save test image
 golgiSlice = dvImage[0,3,:,:]
