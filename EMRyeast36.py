@@ -158,13 +158,7 @@ def makeCellzStack(dvImage, bwChannel=2, showProgress=True):
                                 gradKernelSize=2, gradstrength=0.05)
         filledLogZeros = fillLogZeros(logZeros)
         bwCellZstack[z,:,:] = filledLogZeros
-        if showProgress:
-            dispText = ('finding edges: progress',
-                        '='*int(20*(z+1)/nZslices),
-                        int(100*(z+1)/nZslices))
-            sys.stdout.write('\r')
-            sys.stdout.write("%s:[%-20s] %d%%" % dispText)
-            sys.stdout.flush()
+        if showProgress: progressBar_text(z,nZslices,'processing edges')
     if showProgress: print()
     return bwCellZstack
 
@@ -216,13 +210,7 @@ def cellsFromZstack(bwCellZstack, showProgress=True):
             bestID = candidates[bestField, 1]
             lookupList.append((bestField, bestID))
             masterCellLabel[stackData['bwLabel'][bestField] == bestID] = obj
-        if showProgress:
-            dispText = ('finding cells: progress',
-                        '='*obj,
-                         obj)
-            sys.stdout.write('\r')
-            sys.stdout.write("%s:[%s] %d cells" % dispText)
-            sys.stdout.flush()
+        if showProgress: progressSpinner_text(obj,'finding cells','cells')
     stackData['masterCellLabel'] = masterCellLabel.astype('uint16')
     stackData['lookupList'] = lookupList
     if showProgress: print()
@@ -553,14 +541,27 @@ def bfCellMorphCleanup(mcl, showProgress,
                            box[1]-1:box[3]+1][cleanup==largest]=cellIdx
                 cleanedMcl[box[0]-1:box[2]+1,
                            box[1]-1:box[3]+1][cleanup==second]=-cellIdx
-        if showProgress:
-            dispText = ('processing cell outlines: progress',
-                        '='*int(20*(cell+1)/nCells),
-                        int(100*(cell+1)/nCells))
-            sys.stdout.write('\r')
-            sys.stdout.write("%s:[%-20s] %d%%" % dispText)
-            sys.stdout.flush()
+        if showProgress: progressBar_text(cell,nCells,
+                                          'processing cell outlines')
+    if showProgress: print()
     return cleanedMcl
+
+def progressBar_text(index,nIndices,processName):
+    dispText = (processName + '- progress',
+                '-'*int(20*(index+1)/nIndices),
+                int(100*(index+1)/nIndices))
+    sys.stdout.write('\r')
+    sys.stdout.write("%s:[%-20s] %d%%" % dispText)
+    sys.stdout.flush()
+    
+def progressSpinner_text(index,processName,indexType):
+    dispText = (processName + '- progress',
+                r'—\|/'[index%4],
+                index,
+                indexType)
+    sys.stdout.write('\r')
+    sys.stdout.write("%s:[%s] %d %s" % dispText)
+    sys.stdout.flush()
 
 def labelCortex_mcl(masterCellLabel, cortexWidth):
     '''
@@ -599,7 +600,7 @@ def merge_labelMcl(labelMcl_one, labelMcl_two):
     mergedMcl[labelMcl_one == 0] = labelMcl_two[labelMcl_one == 0]
     return mergedMcl
 
-def buffer_mcl(masterCellLabel, bufferSize):
+def buffer_mcl(masterCellLabel, bufferSize, showProgress):
     '''
     add a buffer to cells on the masterCellLabel to compensate for minor errors
     in registration between brightfield derived outlines and fluorescence
@@ -623,6 +624,9 @@ def buffer_mcl(masterCellLabel, bufferSize):
         tablet = ndimage.binary_dilation(tablet, iterations=bufferSize +2)
         mergeTab = mergeTab+tablet
         tablet[tablet == 1] = 0
+        if showProgress: progressSpinner_text(cellIdx,
+                                              'generating measurement masks',
+                                              '')
     overlaps[mergeTab > 1] = 1
     bufferedCells = ndimage.binary_dilation(
             masterCellLabel, iterations=bufferSize)
@@ -666,6 +670,7 @@ def buffer_mcl(masterCellLabel, bufferSize):
         bufferLbl = labeledBuffer[centroid]
         labeledBuffer[labeledBuffer == bufferLbl] = cellLbl
     labeledBuffer[masterCellLabel != 0] = 0
+    if showProgress: print('finsished')
     return labeledBuffer
 
 
@@ -764,19 +769,14 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
         measurements['bud_area'] = budArea
         measurements['bud_' + fluorName + '_brightness'] = budBrightness
         results.append(measurements)
-        if showProgress:
-            dispText = ('measuring: progress',
-                        '='*int(20*(cellID)/nCells),
-                        int(100*(cellID)/nCells))
-            sys.stdout.write('\r')
-            sys.stdout.write("%s:[%-20s] %d%%" % dispText)
-            sys.stdout.flush()
+        if showProgress: progressBar_text(cellID,nCells,'measuring')
+    if showProgress: print()
     nextStartIndex = nCells    
     return results, nextStartIndex
     
 #prepare qc image
-#def prep_qcImage(mainFluorescence, refFluorescence, qcMclList, startIdx):
-#    cellProps = regionprops()
+def prep_qcImage(mainFluorescence, refFluorescence, qcMclList, startIdx):
+    cellProps = regionprops()
     
     
 '''
@@ -809,9 +809,11 @@ rawMcl = cellsFromZstack(bwCellZstack,showProgress=True)[0]
 masterCellLabel = bfCellMorphCleanup(rawMcl, showProgress=True,)
 
 #generate masks (with mcl consistent labels)
-print('\ngenerating measurement masks')
+#print('\ngenerating measurement masks')
 cortexMcl = labelCortex_mcl(masterCellLabel,cortexWidth=8)
-buffer = buffer_mcl(masterCellLabel, bufferSize=5)
+buffer = buffer_mcl(masterCellLabel, bufferSize=5, showProgress=True)
+
+#combine masks
 masterCellLabelBuffered = merge_labelMcl(masterCellLabel, buffer)
 cortexMclBuffered = merge_labelMcl(cortexMcl, buffer)
 golgiMcl = labelMaxproj(masterCellLabelBuffered,image=dvImage,mkrChannel=0)
@@ -826,11 +828,19 @@ refMclDict = {'cortex(buffered)':cortexMclBuffered,
               'nonGolgicortex(buffered)':cortexBufferedMinusGolgi
               }
 expID = 'xx0001'
-stashedMcl = np.copy(masterCellLabel)
+masterCellLabelUnbuffered = np.copy(masterCellLabel)
 masterCellLabel = np.copy(masterCellLabelBuffered)
+startIdx = 0
 
+globalMin = primaryImage['Art1-mNG'].min()
+globalMax = primaryImage['Art1-mNG'].max()
 
-''
+results,startIdx = measure_cells(primaryImage, masterCellLabel, refMclDict,
+                                 imageName, expID, startIdx,
+                                 globalMin, globalMax, showProgress=True)
+
+refImage = dvImage[0,3,:,:]
+'''
 #save test image
 golgiSlice = dvImage[0,3,:,:]
 art1Slice = dvImage[1,3,:,:]
@@ -843,7 +853,7 @@ testImage = mergeForTiff([golgiSlice,
                           cortexBufferedMinusGolgi,
                           golgiMcl])
 tifffile.imsave(folderPath+'test.tiff',testImage)
-''
+'''
 
 
 '''
