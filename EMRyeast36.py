@@ -775,7 +775,7 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
     return results, nextStartIndex
     
 #prepare qc image
-def prep_qcImage(greenFluor, redFluor, qcMclList, startIdx, scalingFactors):
+def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     rgbList=[0,0,0]
     ySize,xSize = greenFluor.shape
     mask_one = qcMclList[0].astype('bool')
@@ -797,12 +797,52 @@ def prep_qcImage(greenFluor, redFluor, qcMclList, startIdx, scalingFactors):
     rgbList[0][mask_one_edge.reshape(ySize,xSize,1)]=1
     rgbList[0][mask_two_edge.reshape(ySize,xSize,1)]=1
     rgbList[1][mask_two_edge.reshape(ySize,xSize,1)]=1
-    rgb = np.concatenate(rgbList, axis=2)
-    return(rgb)
+    rgbQC = np.concatenate(rgbList, axis=2)
+    return(rgbQC)
             
-    #cellProps = regionprops()
-    
-
+#prepare qc stack
+def prep_qcStack(rgbQC, masterCellLabel,
+                 greenFluor, redFluor, scalingFactors,
+                 startIdx, borderSize):
+    qcStack = []
+    nRows,nCols = masterCellLabel.shape
+    cellProps = regionprops(np.abs(masterCellLabel))
+    nCells = np.max(masterCellLabel)
+    grayscaleQC = np.mean(rgbQC, axis=2)
+    grayQCz3 = np.concatenate(3*[grayscaleQC.reshape(nRows,nCols,1)],axis=2)
+    mclz3 = np.concatenate(3*[masterCellLabel.reshape(nRows,nCols,1)],axis=2)
+    redScaled = ((redFluor-redFluor.min())
+                 / (scalingFactors[0]*redFluor.max()-redFluor.min()))
+    redScaled[redScaled > 1] = 1
+    redInv = (1 - redScaled)
+    greenScaled = ((greenFluor-greenFluor.min())
+                   / (scalingFactors[0]*greenFluor.max()-greenFluor.min()))
+    greenScaled[greenScaled > 1] = 1
+    greenInv = (1 - greenScaled)
+    for cell in range(nCells):
+        cellID = cell + 1
+        tablet = np.ndarray.flatten(grayQCz3)
+        mask = np.ndarray.flatten(np.abs(mclz3))==cellID
+        tablet[mask]=np.ndarray.flatten(rgbQC)[mask]
+        tablet = tablet.reshape((nRows,nCols,3))
+        ymin,xmin,ymax,xmax = cellProps[cell].bbox
+        height = ymax-ymin
+        width = xmax-xmin
+        squareSide = np.max([width,height]) + borderSize
+        centerY = int(ymax - height/2)
+        centerX = int(xmax - width/2)
+        ytop = int(min(max(squareSide / 2, centerY), nRows - squareSide / 2)
+                   - squareSide/2)
+        xtop = int(min(max(squareSide / 2, centerX), nCols - squareSide / 2)
+                   - squareSide/2)
+        qcFrame = tablet[ytop:ytop+squareSide,xtop:xtop+squareSide,:]
+        redInvFrame = redInv[ytop:ytop+squareSide,xtop:xtop+squareSide]
+        greenInvFrame = greenInv[ytop:ytop+squareSide,xtop:xtop+squareSide]
+        qcDict = {'qcFrame':qcFrame,
+                  'redInvFrame':redInvFrame,
+                  'greenInvFrame':greenInvFrame}
+        qcStack.append(qcDict)
+    return(qcStack)
     
 '''
 below: script for developing new Art1 localization measurements.
@@ -865,15 +905,15 @@ results,startIdx = measure_cells(primaryImage, masterCellLabel, refMclDict,
                                  globalMin, globalMax, showProgress=True)
 
 
-scalingFactors = [0.3,0.3]
+scalingFactors = [0.2,0.2]
 grnScl = 0.4
 greenFluor = dvImage[1,3,:,:].astype(float)
 redScl = 0.4
 redFluor = np.amax(dvImage[0,:,:,:],axis=0).astype(float)
 qcMclList = [cortexBufferedMinusGolgi,golgiMcl]
 
-rgb = prep_qcImage(greenFluor, redFluor, qcMclList, startIdx, scalingFactors)
-plt.imshow(rgb)
+rgbQC = prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors)
+plt.imshow(rgbQC)
 #greenFluor = (greenFluor-greenFluor.min())/(grnScl*greenFluor.max()-greenFluor.min())
 #greenInv = -1*(greenFluor-1)
 #greenFluor[greenFluor>1]=1
