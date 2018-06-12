@@ -11,6 +11,7 @@ extends methods to quantify flourescence localization against two markers
     and evaluate punctate, membrane coloaclization (tested with Art1-mNG)
 """
 
+import os
 import numpy as np
 import scipy as sp
 import mrcfile
@@ -26,6 +27,29 @@ import tifffile
 from timeit import default_timer as timer
 import sys
 import basicText2im
+
+def batchParse(targetFolder, imageExtension='R3D_D3D.dv'):
+    '''updated parser based on EMRyeastv2 parser
+    
+    targetFolder: path to the top level analysis folder
+    imageExtension: terminating characters of images to includ in analysis.
+        defaults to "R3D_D3D.dv", the flag and extension deltavision software
+    
+    '''
+    pathlist = []
+    imagenameList = []
+    extensionLen = len(imageExtension)
+    for root, dirs, files in os.walk(targetFolder):
+        for item in files:
+            if item[-extensionLen::] == imageExtension:
+                pathlist.append(os.path.join(root, item))
+                imagenameList.append(item)
+    pathlist = sorted(pathlist)
+    imagenameList = sorted(imagenameList)
+    folderData = {'imagenameList' : imagenameList,
+                   'pathlist' : pathlist,
+                   'nFields': len(pathlist)}
+    return folderData
 
 def basicDVreader(imagePath, rolloff, nChannels=3, zFirst=True):
     ''' very simple function to read .dv files as formatted by deltavision 
