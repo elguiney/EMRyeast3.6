@@ -844,6 +844,33 @@ def prep_qcStack(rgbQC, masterCellLabel,
         qcStack.append(qcDict)
     return(qcStack)
     
+def display_qcFrame(qcDict,frameTitles):
+    qcFrame = qcDict['qcFrame']
+    redInvFrame = qcDict['redInvFrame']
+    greenInvFrame = qcDict['greenInvFrame']
+    frameSize = len(redInvFrame)
+    qcAx = plt.subplot2grid((2,3), (0,0), rowspan=2, colspan=2)
+    plt.imshow(qcFrame)
+    qcAx.axis('off')
+    plt.title('Main display')
+    #qcAx.xaxis.set_major_locator(plt.NullLocator())
+    #qcAx.yaxis.set_major_locator(plt.NullLocator())
+    redAx = plt.subplot2grid((2,3), (0,2))
+    plt.imshow(redInvFrame, cmap='gray')
+    redAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
+    redAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
+    redAx.xaxis.set_ticklabels([])
+    redAx.yaxis.set_ticklabels([])
+    plt.grid()
+    plt.title(frameTitles[0])
+    grnAx = plt.subplot2grid((2,3), (1,2))
+    plt.imshow(greenInvFrame, cmap='gray')
+    grnAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
+    grnAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
+    grnAx.xaxis.set_ticklabels([])
+    grnAx.yaxis.set_ticklabels([])
+    plt.grid()
+    plt.title(frameTitles[1])
 '''
 below: script for developing new Art1 localization measurements.
 '''
