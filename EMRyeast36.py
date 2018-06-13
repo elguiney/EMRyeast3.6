@@ -28,7 +28,7 @@ from timeit import default_timer as timer
 import sys
 import basicText2im
 
-def batchParse(targetFolder, imageExtension='R3D_D3D.dv'):
+def batchParse(targetFolder, expIDloc, imageExtension='R3D_D3D.dv'):
     '''updated parser based on EMRyeastv2 parser
     
     targetFolder: path to the top level analysis folder
@@ -38,17 +38,19 @@ def batchParse(targetFolder, imageExtension='R3D_D3D.dv'):
     '''
     pathlist = []
     imagenameList = []
+    expIDlist = []
     extensionLen = len(imageExtension)
     for root, dirs, files in os.walk(targetFolder):
         for item in files:
             if item[-extensionLen::] == imageExtension:
                 pathlist.append(os.path.join(root, item))
                 imagenameList.append(item)
-    pathlist = sorted(pathlist)
-    imagenameList = sorted(imagenameList)
+                expID = item[expIDloc[0]:expIDloc[1]]
+                expIDlist.append(expID)
     folderData = {'imagenameList' : imagenameList,
                    'pathlist' : pathlist,
-                   'nFields': len(pathlist)}
+                   'nFields': len(pathlist),
+                   'expIDlist: expIDlist}
     return folderData
 
 def basicDVreader(imagePath, rolloff, nChannels=3, zFirst=True):
