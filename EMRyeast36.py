@@ -468,124 +468,132 @@ def bfCellMorphCleanup(mcl, showProgress,
     #resegment mcl
     flatMcl = mcl.astype('bool')
     relabeledMcl, nCells = ndimage.label(flatMcl)
+    idxOffset = 0
     for cell in range(nCells):
         cellIdx = cell + 1    
         masterCellMask = np.zeros(np.shape(mcl), dtype='bool')
         masterCellMask[relabeledMcl==cellIdx] = 1
-        cellProps = regionprops(masterCellMask.astype('int'))
-        box = cellProps[0].bbox
-        cellMask = masterCellMask[box[0]-1:box[2]+1,box[1]-1:box[3]+1]
-        cellMask = ndimage.binary_fill_holes(ndimage.binary_closing
-                                             (cellMask,closeStruct))
-        cmsk_lbls, nlbls = ndimage.label(cellMask, structure = np.ones((3,3)))
-        sizes = [len(cmsk_lbls[cmsk_lbls==idx+1]) for idx in range(nlbls)]
-        cellMask[cmsk_lbls!=np.argmax(sizes)+1]=0
-        edgeLabels = edgeLabel(cellMask)
-        localThetas = np.array(angleFinder(cellMask,edgeLabels))
-        ''' prep localThetas for finding curves by 
-        (1) wrapping the end and (2) replacing zeros with small values '''
-        curveZeros = np.where(np.diff(np.sign(np.append(localThetas,
-                                                        localThetas[0]))))[0]
-        ''' assume to always be starting at regions of positive curvature,
-        based on geometry of edgeLabel()'''
-        negCurves = np.reshape(curveZeros,(-1,2))
-        negCurveLengths = np.diff(negCurves)
-        nNegCurves = int(len(curveZeros)/2)      
-        negCurveAngles = np.zeros(nNegCurves)        
-        # check morphology 
-        for idx in range(nNegCurves):
-            negCurveAngles[idx] = np.mean([localThetas[i+1] 
-                                           for i in range(negCurves[idx,0],
-                                                          negCurves[idx,1])])
-        # find goodCurves, convex regions with stronger curvature than minAngle
-        # these are either the edges of the bud neck, or bright field artifacts
-        goodCurves = np.where(((negCurveLengths > minLength).T 
-                               & (negCurveAngles < -minAngleRads))[0])[0]
-        nCurves = len(goodCurves) 
-        if nCurves == 0:
-            # write to cleanedMcl without alteration
-            cleanedMcl[box[0]-1:box[2]+1,
-                       box[1]-1:box[3]+1][cellMask==1]=cellIdx
-        elif nCurves == 1:
-            # one concave region is typically not a bud neck, instead usually
-            # results from bright field artifacts.
-            cellMask[1:-1,1:-1] = cellProps[0].convex_image
-            # write to cleanedMcl
-            cleanedMcl[box[0]-1:box[2]+1,
-                       box[1]-1:box[3]+1][cellMask==1]=cellIdx
-        elif nCurves == 2:
-            neck_linIdx_1 = (negCurves[goodCurves][0,0] +
-                             np.argmin(localThetas[negCurves[goodCurves][0,0]:
-                                       negCurves[goodCurves][0,1]:1]))
-            neck_linIdx_2 = (negCurves[goodCurves][1,0] +
-                             np.argmin(localThetas[negCurves[goodCurves][1,0]:
-                                       negCurves[goodCurves][1,1]:1]))
-            neck_yx1 = edgeLabels[neck_linIdx_1]
-            neck_yx2 = edgeLabels[neck_linIdx_2]
-            rr, cc = draw.line(neck_yx1[0],neck_yx1[1],neck_yx2[0],neck_yx2[1])
-            cellMask[rr,cc]=0
-            newCells, nlbl = ndimage.label(cellMask)
-            # if segmentation produced a 'bud' below the budsize cutoff, it is
-            # likely an error. take the convex hull instead.
-            sizes = np.array([len(newCells[newCells==idx+1]) 
-                              for idx in range(nlbl)])
-            largest = np.argmax(sizes)+1
-            if sum(newCells.astype('bool')[newCells!=largest]) < minBudSize:
+        try:
+            cellIdx = cellIdx + idxOffset
+            cellProps = regionprops(masterCellMask.astype('int'))
+            box = cellProps[0].bbox
+            cellMask = masterCellMask[box[0]-1:box[2]+1,box[1]-1:box[3]+1]
+            cellMask = ndimage.binary_fill_holes(ndimage.binary_closing
+                                                 (cellMask,closeStruct))
+            cmsk_lbls, nlbls = ndimage.label(cellMask, structure = np.ones((3,3)))
+            sizes = [len(cmsk_lbls[cmsk_lbls==idx+1]) for idx in range(nlbls)]
+            cellMask[cmsk_lbls!=np.argmax(sizes)+1]=0
+            edgeLabels = edgeLabel(cellMask)
+            localThetas = np.array(angleFinder(cellMask,edgeLabels))
+            ''' prep localThetas for finding curves by 
+            (1) wrapping the end and (2) replacing zeros with small values '''
+            curveZeros = np.where(np.diff(np.sign(np.append(localThetas,
+                                                            localThetas[0]))))[0]
+            ''' assume to always be starting at regions of positive curvature,
+            based on geometry of edgeLabel()'''
+            negCurves = np.reshape(curveZeros,(-1,2))
+            negCurveLengths = np.diff(negCurves)
+            nNegCurves = int(len(curveZeros)/2)      
+            negCurveAngles = np.zeros(nNegCurves)        
+            # check morphology 
+            for idx in range(nNegCurves):
+                negCurveAngles[idx] = np.mean([localThetas[i+1] 
+                                               for i in range(negCurves[idx,0],
+                                                              negCurves[idx,1])])
+            # find goodCurves, convex regions with stronger curvature than minAngle
+            # these are either the edges of the bud neck, or bright field artifacts
+            goodCurves = np.where(((negCurveLengths > minLength).T 
+                                   & (negCurveAngles < -minAngleRads))[0])[0]
+            nCurves = len(goodCurves) 
+            if nCurves == 0:
+                # write to cleanedMcl without alteration
+                cleanedMcl[box[0]-1:box[2]+1,
+                           box[1]-1:box[3]+1][cellMask==1]=cellIdx
+            elif nCurves == 1:
+                # one concave region is typically not a bud neck, instead usually
+                # results from bright field artifacts.
                 cellMask[1:-1,1:-1] = cellProps[0].convex_image
                 # write to cleanedMcl
                 cleanedMcl[box[0]-1:box[2]+1,
                            box[1]-1:box[3]+1][cellMask==1]=cellIdx
-            else:
-                # recut neck to assign neck to largest cell
-                newCells[rr,cc]=largest
-                # write to cleanedMcl with -idx for bud cell
-                cleanedMcl[box[0]-1:box[2]+1,
-                           box[1]-1:box[3]+1][newCells==largest]=cellIdx
-                cleanedMcl[box[0]-1:box[2]+1,
-                           box[1]-1:box[3]+1][newCells==largest%2+1]=-cellIdx
-        elif nCurves > 2:
-            goodCurveAngles = negCurveAngles[goodCurves]
-            edge1L = negCurves[goodCurves[np.argsort(goodCurveAngles)[0]]][0]
-            edge1R = negCurves[goodCurves[np.argsort(goodCurveAngles)[0]]][1]
-            edge2L = negCurves[goodCurves[np.argsort(goodCurveAngles)[1]]][0]
-            edge2R = negCurves[goodCurves[np.argsort(goodCurveAngles)[1]]][1]
-            neck_linIdx_1 = edge1L + np.argmin(localThetas[edge1L:edge1R])
-            neck_linIdx_2 = edge2L + np.argmin(localThetas[edge2L:edge2R])
-            neck_yx1 = edgeLabels[neck_linIdx_1]
-            neck_yx2 = edgeLabels[neck_linIdx_2]
-            rr, cc = draw.line(neck_yx1[0],neck_yx1[1],neck_yx2[0],neck_yx2[1])
-            cellMask[rr,cc]=0
-            newCells, nlbl = ndimage.label(cellMask)
-            # if segmentation produced a 'bud' below the budsize cutoff, it is
-            # likely an error. take the convex hull instead.
-            sizes = np.array([len(newCells[newCells==idx+1]) 
-                              for idx in range(nlbl)])
-            largest = np.argmax(sizes)+1
-            if sum(newCells.astype('bool')[newCells!=largest]) < minBudSize:
-                cellMask[1:-1,1:-1] = cellProps[0].convex_image
-                # write to cleanedMcl
-                cleanedMcl[box[0]-1:box[2]+1,
-                           box[1]-1:box[3]+1][cellMask==1]=cellIdx
-            # otherwise, remaining minor negative curvatures are likely bright-
-            # field artifacts. Take convex hull of each instead.
-            else:
-                #check for second largest cell
-                second = np.where(
-                        sizes==np.max(np.delete(sizes,largest-1)))[0][0]+1
-                cleanup = np.zeros(newCells.shape,dtype=newCells.dtype)
-                subCellProps = regionprops(newCells)
-                for subCell in [second,largest]:
-                    subBox = subCellProps[subCell-1].bbox
-                    sub_cvx_hull = subCellProps[subCell-1].convex_image
-                    cleanup[subBox[0]:subBox[2],
-                            subBox[1]:subBox[3]][sub_cvx_hull==1] = subCell
-                # recut neck to assign neck to largest cell
-                cleanup[rr,cc]=largest
-                # write to cleanedMcl with -idx for bud cell
-                cleanedMcl[box[0]-1:box[2]+1,
-                           box[1]-1:box[3]+1][cleanup==largest]=cellIdx
-                cleanedMcl[box[0]-1:box[2]+1,
-                           box[1]-1:box[3]+1][cleanup==second]=-cellIdx
+            elif nCurves == 2:
+                neck_linIdx_1 = (negCurves[goodCurves][0,0] +
+                                 np.argmin(localThetas[negCurves[goodCurves][0,0]:
+                                           negCurves[goodCurves][0,1]:1]))
+                neck_linIdx_2 = (negCurves[goodCurves][1,0] +
+                                 np.argmin(localThetas[negCurves[goodCurves][1,0]:
+                                           negCurves[goodCurves][1,1]:1]))
+                neck_yx1 = edgeLabels[neck_linIdx_1]
+                neck_yx2 = edgeLabels[neck_linIdx_2]
+                rr, cc = draw.line(neck_yx1[0],neck_yx1[1],neck_yx2[0],neck_yx2[1])
+                cellMask[rr,cc]=0
+                newCells, nlbl = ndimage.label(cellMask)
+                # if segmentation produced a 'bud' below the budsize cutoff, it is
+                # likely an error. take the convex hull instead.
+                sizes = np.array([len(newCells[newCells==idx+1]) 
+                                  for idx in range(nlbl)])
+                largest = np.argmax(sizes)+1
+                if sum(newCells.astype('bool')[newCells!=largest]) < minBudSize:
+                    cellMask[1:-1,1:-1] = cellProps[0].convex_image
+                    # write to cleanedMcl
+                    cleanedMcl[box[0]-1:box[2]+1,
+                               box[1]-1:box[3]+1][cellMask==1]=cellIdx
+                else:
+                    # recut neck to assign neck to largest cell
+                    newCells[rr,cc]=largest
+                    # write to cleanedMcl with -idx for bud cell
+                    cleanedMcl[box[0]-1:box[2]+1,
+                               box[1]-1:box[3]+1][newCells==largest]=cellIdx
+                    cleanedMcl[box[0]-1:box[2]+1,
+                               box[1]-1:box[3]+1][newCells==largest%2+1]=-cellIdx
+            elif nCurves > 2:
+                goodCurveAngles = negCurveAngles[goodCurves]
+                edge1L = negCurves[goodCurves[np.argsort(goodCurveAngles)[0]]][0]
+                edge1R = negCurves[goodCurves[np.argsort(goodCurveAngles)[0]]][1]
+                edge2L = negCurves[goodCurves[np.argsort(goodCurveAngles)[1]]][0]
+                edge2R = negCurves[goodCurves[np.argsort(goodCurveAngles)[1]]][1]
+                neck_linIdx_1 = edge1L + np.argmin(localThetas[edge1L:edge1R])
+                neck_linIdx_2 = edge2L + np.argmin(localThetas[edge2L:edge2R])
+                neck_yx1 = edgeLabels[neck_linIdx_1]
+                neck_yx2 = edgeLabels[neck_linIdx_2]
+                rr, cc = draw.line(neck_yx1[0],neck_yx1[1],neck_yx2[0],neck_yx2[1])
+                cellMask[rr,cc]=0
+                newCells, nlbl = ndimage.label(cellMask)
+                # if segmentation produced a 'bud' below the budsize cutoff, it is
+                # likely an error. take the convex hull instead.
+                sizes = np.array([len(newCells[newCells==idx+1]) 
+                                  for idx in range(nlbl)])
+                largest = np.argmax(sizes)+1
+                if sum(newCells.astype('bool')[newCells!=largest]) < minBudSize:
+                    cellMask[1:-1,1:-1] = cellProps[0].convex_image
+                    # write to cleanedMcl
+                    cleanedMcl[box[0]-1:box[2]+1,
+                               box[1]-1:box[3]+1][cellMask==1]=cellIdx
+                # otherwise, remaining minor negative curvatures are likely bright-
+                # field artifacts. Take convex hull of each instead.
+                else:
+                    #check for second largest cell
+                    second = np.where(
+                            sizes==np.max(np.delete(sizes,largest-1)))[0][0]+1
+                    cleanup = np.zeros(newCells.shape,dtype=newCells.dtype)
+                    subCellProps = regionprops(newCells)
+                    for subCell in [second,largest]:
+                        subBox = subCellProps[subCell-1].bbox
+                        sub_cvx_hull = subCellProps[subCell-1].convex_image
+                        cleanup[subBox[0]:subBox[2],
+                                subBox[1]:subBox[3]][sub_cvx_hull==1] = subCell
+                    # recut neck to assign neck to largest cell
+                    cleanup[rr,cc]=largest
+                    # write to cleanedMcl with -idx for bud cell
+                    cleanedMcl[box[0]-1:box[2]+1,
+                               box[1]-1:box[3]+1][cleanup==largest]=cellIdx
+                    cleanedMcl[box[0]-1:box[2]+1,
+                               box[1]-1:box[3]+1][cleanup==second]=-cellIdx
+        # if nothing works, just delete the cell
+        except:
+            cleanedMcl[masterCellMask] = 0
+            idxOffset -= 1
+            print('cleanup error at cellIdx=%s, dropped from mcl' % cellIdx)
         if showProgress: progressBar_text(cell,nCells,
                                           'processing cell outlines')
     if showProgress: print()
