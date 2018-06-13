@@ -50,8 +50,27 @@ def batchParse(targetFolder, expIDloc, imageExtension='R3D_D3D.dv'):
     folderData = {'imagenameList' : imagenameList,
                    'pathlist' : pathlist,
                    'nFields': len(pathlist),
-                   'expIDlist: expIDlist}
+                   'expIDlist': expIDlist}
     return folderData
+
+def batchIntensityScale(folderData, channel, showProgress=True):
+    nFields = folderData['nFields']
+    pathList = folderData['pathlist']
+    maxlist = []
+    minlist = []
+    for field in range(nFields):
+        dvImage = basicDVreader(
+                pathList[field],rolloff=64,nChannels=3,zFirst=True)
+        fieldMax = np.max(dvImage[channel,:,:,:])
+        maxlist.append(fieldMax)
+        fieldMin = np.min(dvImage[channel,:,:,:])
+        minlist.append(fieldMin)
+        if showProgress: progressBar_text(field,nFields,'scaling intensities')
+    if showProgress: print()
+    globalmax = np.max(maxlist)
+    globalmin = np.min(minlist)
+    result = {'globalmax':globalmax, 'globalmin':globalmin}
+    return result
 
 def basicDVreader(imagePath, rolloff, nChannels=3, zFirst=True):
     ''' very simple function to read .dv files as formatted by deltavision 
