@@ -735,6 +735,18 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
     if showProgress: print('finsished')
     return labeledBuffer
 
+def centroidCirclesMcl(mask, masterCellLabel, radius):
+    maskLabels, nlbl = ndimage.label(mask)
+    maskProps = regionprops(maskLabels)
+    newMask = np.zeros(mask.shape, dtype='bool')
+    newMcl = np.zeros(mask.shape, dtype='int')
+    for lbl in range(nlbl):
+        y,x = maskProps[lbl].centroid
+        rr,cc = draw.circle(y, x, radius)
+        newMask[rr,cc] = 1
+    newMcl[newMask] = masterCellLabel[newMask]
+    return newMcl
+        
 
 def measure_cells(primaryImage, masterCellLabel, refMclDict,
                   imageName, expID, startIdx,
@@ -851,7 +863,7 @@ def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
         fluor = [redFluor,greenFluor][idx]
         fluor = fluor.astype('float')
         scaled = 255*((fluor-fluor.min()) 
-                  / (scalingFactors[idx]*fluor.max()-fluor.min()))
+                  / (scalingFactors[idx]*(fluor.max()-fluor.min())))
         scaled[scaled>255] = 255
         scaled = scaled.astype('uint8').reshape(ySize,xSize,1)
         rgbList[idx] = scaled
@@ -862,52 +874,48 @@ def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     rgbQC = np.concatenate(rgbList, axis=2)
     return(rgbQC)
             
-#prepare qc stack
-def prep_qcStack(rgbQC, masterCellLabel,
-                 greenFluor, redFluor, scalingFactors,
-                 startIdx, borderSize):
-    '''
-    this function is a huge memory hog! don't use it
-    '''
-    qcStack = []
+def make_qcFrame(rgbQC, greenFluor, redFluor, masterCellLabel,
+                 cellIdx, scalingFactors, borderSize):
+    mask = np.zeros(masterCellLabel.shape, dtype='uint8')
+    mask[np.abs(masterCellLabel) == cellIdx] = 1
+    cellProps = regionprops(mask)
     nRows,nCols = masterCellLabel.shape
-    cellProps = regionprops(np.abs(masterCellLabel))
-    nCells = np.max(masterCellLabel)
-    grayscaleQC = np.mean(rgbQC, axis=2)
+    ymin,xmin,ymax,xmax = cellProps[0].bbox
+    height = ymax-ymin
+    width = xmax-xmin
+
+    squareSide = np.max([width,height]) + borderSize
+    centerY = int(ymax - height/2)
+    centerX = int(xmax - width/2)
+    ytop = int(min(max(squareSide / 2, centerY), nRows - squareSide / 2)
+               - squareSide/2)
+    xtop = int(min(max(squareSide / 2, centerX), nCols - squareSide / 2)
+               - squareSide/2)
+
+    greenFluor = greenFluor.astype('float')
+    redFluor = redFluor.astype('float')
+    grayscaleQC = np.max(rgbQC, axis=2)
     grayQCz3 = np.concatenate(3*[grayscaleQC.reshape(nRows,nCols,1)],axis=2)
-    mclz3 = np.concatenate(3*[masterCellLabel.reshape(nRows,nCols,1)],axis=2)
+    maskz3 = np.concatenate(3*[mask.reshape(nRows,nCols,1)],axis=2)
     redScaled = ((redFluor-redFluor.min())
-                 / (scalingFactors[0]*redFluor.max()-redFluor.min()))
+                 / (scalingFactors[0]*(redFluor.max()-redFluor.min())))
     redScaled[redScaled > 1] = 1
-    redInv = (1 - redScaled)
+    redInv = (255*(1 - redScaled)).astype('uint8')
     greenScaled = ((greenFluor-greenFluor.min())
-                   / (scalingFactors[0]*greenFluor.max()-greenFluor.min()))
+                   / (scalingFactors[0]*(greenFluor.max()-greenFluor.min())))
     greenScaled[greenScaled > 1] = 1
-    greenInv = (1 - greenScaled)
-    for cell in range(nCells):
-        cellID = cell + 1
-        tablet = np.ndarray.flatten(grayQCz3)
-        mask = np.ndarray.flatten(np.abs(mclz3))==cellID
-        tablet[mask]=np.ndarray.flatten(rgbQC)[mask]
-        tablet = tablet.reshape((nRows,nCols,3))
-        ymin,xmin,ymax,xmax = cellProps[cell].bbox
-        height = ymax-ymin
-        width = xmax-xmin
-        squareSide = np.max([width,height]) + borderSize
-        centerY = int(ymax - height/2)
-        centerX = int(xmax - width/2)
-        ytop = int(min(max(squareSide / 2, centerY), nRows - squareSide / 2)
-                   - squareSide/2)
-        xtop = int(min(max(squareSide / 2, centerX), nCols - squareSide / 2)
-                   - squareSide/2)
-        qcFrame = tablet[ytop:ytop+squareSide,xtop:xtop+squareSide,:]
-        redInvFrame = redInv[ytop:ytop+squareSide,xtop:xtop+squareSide]
-        greenInvFrame = greenInv[ytop:ytop+squareSide,xtop:xtop+squareSide]
-        qcDict = {'qcFrame':qcFrame,
-                  'redInvFrame':redInvFrame,
-                  'greenInvFrame':greenInvFrame}
-        qcStack.append(qcDict)
-    return(qcStack)
+    greenInv = (255*(1 - greenScaled)).astype('uint8')
+    flatMask = np.ndarray.flatten(maskz3)
+    flatDisplay = np.ndarray.flatten(grayQCz3).astype('uint8')
+    flatDisplay[flatMask==1] = np.ndarray.flatten(rgbQC)[flatMask==1]
+    display = flatDisplay.reshape((nRows,nCols,3))
+    qcFrame = display[ytop:ytop+squareSide,xtop:xtop+squareSide,:]
+    redInvFrame = redInv[ytop:ytop+squareSide,xtop:xtop+squareSide]
+    greenInvFrame = greenInv[ytop:ytop+squareSide,xtop:xtop+squareSide]
+    qcDict = {'qcFrame':qcFrame,
+              'redInvFrame':redInvFrame,
+              'greenInvFrame':greenInvFrame}    
+    return qcDict
     
 def display_qcFrame(qcDict,frameTitles):
     qcFrame = qcDict['qcFrame']
