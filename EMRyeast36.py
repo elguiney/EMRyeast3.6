@@ -658,24 +658,24 @@ def merge_labelMcl(labelMcl_one, labelMcl_two):
     mergedMcl[labelMcl_one == 0] = labelMcl_two[labelMcl_one == 0]
     return mergedMcl
 
-def buffer_mcl(masterCellLabel, bufferSize, showProgress):
+def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
     '''
-    add a buffer to cells on the masterCellLabel to compensate for minor errors
+    add a buffer to cells on the unbufferedMcl to compensate for minor errors
     in registration between brightfield derived outlines and fluorescence
     image. Intelligently split borders between closely touching cells so that
     nearby fluorescent signal is not misassigned.
     '''
     #initialize workspaces
-    tablet = np.zeros(masterCellLabel.shape, masterCellLabel.dtype)
-    mergeTab = np.zeros(masterCellLabel.shape, masterCellLabel.dtype)
-    overlaps = np.zeros(masterCellLabel.shape, masterCellLabel.dtype)
+    tablet = np.zeros(unbufferedMcl.shape, unbufferedMcl.dtype)
+    mergeTab = np.zeros(unbufferedMcl.shape, unbufferedMcl.dtype)
+    overlaps = np.zeros(unbufferedMcl.shape, unbufferedMcl.dtype)
     #get number of cells (treating buds as distinct)
-    uniqueLabels = np.unique(masterCellLabel)
+    uniqueLabels = np.unique(unbufferedMcl)
     index = np.argwhere(uniqueLabels == 0)
     uniqueLabels = np.delete(uniqueLabels,index)
     #build borders in loop to maintain overlaps
     for cellIdx in uniqueLabels:
-        tablet[masterCellLabel == cellIdx] = 1
+        tablet[unbufferedMcl == cellIdx] = 1
         #dilate each cell by the bufferSize, then add two more dilations to 
         #ensure segmentation of regions that touch but do not overlap at the
         #requested buffer size
@@ -687,7 +687,7 @@ def buffer_mcl(masterCellLabel, bufferSize, showProgress):
                                               '')
     overlaps[mergeTab > 1] = 1
     bufferedCells = ndimage.binary_dilation(
-            masterCellLabel, iterations=bufferSize)
+            unbufferedMcl, iterations=bufferSize)
     #divide overlapping regions with skeletonize
     overlapsSkeleton = morph.skeletonize(overlaps).astype('int')
     #extend skeleton so it always completely divides cells
@@ -700,7 +700,7 @@ def buffer_mcl(masterCellLabel, bufferSize, showProgress):
     overlapsSklt_conn[overlapsSkeleton == 0] = 0
     ovlpSklt_tipY,ovlpSklt_tipX = np.where(overlapsSklt_conn == 1)
     distBuffCells = ndimage.morphology.distance_transform_cdt(
-            bufferedCells.astype('int'))
+            ndimage.binary_dilation(bufferedCells).astype('int'))            
     #second, loop through edges and find nearest descending distance_transform
     #point, update skeleton, and continue until new edge is at a distance == 1
     yPattern = np.array([-1,-1,-1, 0, 1, 1, 1, 0],dtype=int)
@@ -721,13 +721,17 @@ def buffer_mcl(masterCellLabel, bufferSize, showProgress):
     #relabel to match mcl
     mclCentroids = np.array(
             ndimage.measurements.center_of_mass(
-                    masterCellLabel,masterCellLabel,uniqueLabels),
+                    unbufferedMcl,unbufferedMcl,uniqueLabels),
             dtype=int)
     for y, x, cellLbl in zip(mclCentroids[:,0],mclCentroids[:,1],uniqueLabels):
         centroid = (y,x)
         bufferLbl = labeledBuffer[centroid]
         labeledBuffer[labeledBuffer == bufferLbl] = cellLbl
-    labeledBuffer[masterCellLabel != 0] = 0
+    labeledBuffer[unbufferedMcl != 0] = 0
+    uniqueNewLabels = np.unique(labeledBuffer)
+    diffLabels = np.setdiff1d(uniqueNewLabels,uniqueLabels)
+    for diff in diffLabels:
+        labeledBuffer[labeledBuffer==diff]=0
     if showProgress: print('finsished')
     return labeledBuffer
 
