@@ -539,13 +539,16 @@ def bfCellMorphCleanup(mcl, showProgress,
                     cleanedMcl[box[0]-1:box[2]+1,
                                box[1]-1:box[3]+1][cellMask==1]=cellIdx
                 else:
+                    #check for second largest cell
+                    second = np.where(
+                            sizes==np.max(np.delete(sizes,largest-1)))[0][0]+1
                     # recut neck to assign neck to largest cell
                     newCells[rr,cc]=largest
                     # write to cleanedMcl with -idx for bud cell
                     cleanedMcl[box[0]-1:box[2]+1,
                                box[1]-1:box[3]+1][newCells==largest]=cellIdx
                     cleanedMcl[box[0]-1:box[2]+1,
-                               box[1]-1:box[3]+1][newCells==largest%2+1]=-cellIdx
+                               box[1]-1:box[3]+1][newCells==second]=-cellIdx
             elif nCurves > 2:
                 goodCurveAngles = negCurveAngles[goodCurves]
                 edge1L = negCurves[goodCurves[np.argsort(goodCurveAngles)[0]]][0]
@@ -589,6 +592,8 @@ def bfCellMorphCleanup(mcl, showProgress,
                                box[1]-1:box[3]+1][cleanup==largest]=cellIdx
                     cleanedMcl[box[0]-1:box[2]+1,
                                box[1]-1:box[3]+1][cleanup==second]=-cellIdx
+            # check for stranded buds, remove them
+            
         # if nothing works, just delete the cell
         except:
             cleanedMcl[masterCellMask] = 0
