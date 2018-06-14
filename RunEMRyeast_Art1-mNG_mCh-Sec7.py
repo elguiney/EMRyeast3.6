@@ -20,7 +20,9 @@ imageNameList = folderData['imagenameList']
 pathList = folderData['pathlist']
 expIDlist = folderData['expIDlist']
 
-rolloff=64
+rolloff = 64
+nChannels = 3
+zFirst = True
 bfAnomalyShiftVector = [2,-1]
 startIdx = 0
 globalExtrema = EMRyeast36.batchIntensityScale(
@@ -33,39 +35,41 @@ fieldsAnalyzed = []
 totalMcl = []
 rgbScalingFactors = [0.4,0.4]
 gryScalingFactors = [0.2,0.2]
+cortexWidth = 10
+bufferSize = 5
+showProgress = True
+mkrChannel = 0
+borderSize = 10
 
 for field in range(nFields):
     print('starting image: ', imageNameList[field])
     # read image
-    dvImage = EMRyeast36.basicDVreader(pathList[field],
-                                       rolloff=rolloff,
-                                       nChannels=3,
-                                       zFirst=True)
+    dvImage = EMRyeast36.basicDVreader(pathList[field], rolloff, nChannels,
+                                       zFirst)
     # find cells from brightfield step 1
-    bwCellZstack = EMRyeast36.makeCellzStack(dvImage,showProgress=True)
+    bwCellZstack = EMRyeast36.makeCellzStack(dvImage,showProgress)
     # find cells from brightfield step 2
     nZslices = dvImage.shape[1]        
     for z in range(nZslices):
         bwCellZstack[z,:,:] = EMRyeast36.correctBFanomaly(bwCellZstack[z,:,:],
                                        bfAnomalyShiftVector)
     # find cells from brightfield step 3
-    rawMcl = EMRyeast36.cellsFromZstack(bwCellZstack,showProgress=True)[0]
+    rawMcl = EMRyeast36.cellsFromZstack(bwCellZstack,showProgress)[0]
     # find cells from brightfield step 4
-    unbufferedMcl = EMRyeast36.bfCellMorphCleanup(rawMcl, showProgress=True,)
+    unbufferedMcl = EMRyeast36.bfCellMorphCleanup(rawMcl, showProgress)
     # unbufferedMcl is the best guess at the 'true outside edge' of the cells;
     # use it as the starting point to find a 10pixel thick cortex
-    cortexMcl = EMRyeast36.labelCortex_mcl(unbufferedMcl,cortexWidth=10)
+    cortexMcl = EMRyeast36.labelCortex_mcl(unbufferedMcl, cortexWidth)
     # because the bright field and fluorescence are not perfectly aligned, and
     # to handle inaccuracies in edge finding, also buffer out from the outside
     # edge
-    buffer = EMRyeast36.buffer_mcl(unbufferedMcl, 
-                                   bufferSize=5, showProgress=True)
+    buffer = EMRyeast36.buffer_mcl(unbufferedMcl, bufferSize, showProgress)
     # merge this buffer onto the unbufferedMcl and the cortexMcl
     masterCellLabel = EMRyeast36.merge_labelMcl(unbufferedMcl, buffer)
     cortexMclBuffered = EMRyeast36.merge_labelMcl(cortexMcl, buffer)
     # use Otsu thresholding on the max projection of mCh-Sec7 to find golgi
     golgiMcl = EMRyeast36.labelMaxproj(masterCellLabel,
-                                       image=dvImage,mkrChannel=0)
+                                       image=dvImage,mkrChannel)
     # subtract so that golgi localization has precedence over cortical
     # localization
     cortexMinusGolgi = EMRyeast36.subtract_labelMcl(cortexMclBuffered,golgiMcl)
@@ -83,7 +87,7 @@ for field in range(nFields):
     # measure
     results,startIdx = EMRyeast36.measure_cells(primaryImage, masterCellLabel,
                                  refMclDict, imageName, expID, startIdx,
-                                 globalMin, globalMax, showProgress=True)
+                                 globalMin, globalMax, showProgress)
     # add measurements from each field to total results
     totalResults = np.concatenate((totalResults,results))
     # quality control prep
@@ -95,7 +99,7 @@ for field in range(nFields):
                                        qcMclList, rgbScalingFactors)
     qcStack = EMRyeast36.prep_qcStack(rgbQC, masterCellLabel,
                                       greenFluor, redFluor, gryScalingFactors,
-                                      startIdx, borderSize=10)
+                                      startIdx, borderSize)
     # add qcStack to totalQC
     totalQC = np.concatenate((totalQC,qcStack))
     # record field as analyzed
