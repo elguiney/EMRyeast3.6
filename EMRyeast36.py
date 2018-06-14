@@ -844,21 +844,21 @@ def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     mask_one_edge = mask_one ^ ndimage.binary_erosion(mask_one)
     mask_two = qcMclList[1].astype('bool')
     mask_two_edge = mask_two ^ ndimage.binary_erosion(mask_two)
-    blue = np.zeros(greenFluor.shape)
-    blue[mask_one_edge + mask_two_edge] = 0.9
+    blue = np.zeros(greenFluor.shape,dtype='uint8')
+    blue[mask_one_edge + mask_two_edge] = 255
     blue = blue.reshape(ySize,xSize,1)
     for idx in range(2):
         fluor = [redFluor,greenFluor][idx]
         fluor = fluor.astype('float')
-        scaled = ((fluor-fluor.min()) 
+        scaled = 255*((fluor-fluor.min()) 
                   / (scalingFactors[idx]*fluor.max()-fluor.min()))
-        scaled[scaled>1] = 1
-        scaled = scaled.reshape(ySize,xSize,1)
+        scaled[scaled>255] = 255
+        scaled = scaled.astype('uint8').reshape(ySize,xSize,1)
         rgbList[idx] = scaled
     rgbList[2] = blue
-    rgbList[0][mask_one_edge.reshape(ySize,xSize,1)]=1
-    rgbList[0][mask_two_edge.reshape(ySize,xSize,1)]=1
-    rgbList[1][mask_two_edge.reshape(ySize,xSize,1)]=1
+    rgbList[0][mask_one_edge.reshape(ySize,xSize,1)]=255
+    rgbList[0][mask_two_edge.reshape(ySize,xSize,1)]=255
+    rgbList[1][mask_two_edge.reshape(ySize,xSize,1)]=255
     rgbQC = np.concatenate(rgbList, axis=2)
     return(rgbQC)
             
@@ -866,6 +866,9 @@ def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
 def prep_qcStack(rgbQC, masterCellLabel,
                  greenFluor, redFluor, scalingFactors,
                  startIdx, borderSize):
+    '''
+    this function is a huge memory hog! don't use it
+    '''
     qcStack = []
     nRows,nCols = masterCellLabel.shape
     cellProps = regionprops(np.abs(masterCellLabel))
