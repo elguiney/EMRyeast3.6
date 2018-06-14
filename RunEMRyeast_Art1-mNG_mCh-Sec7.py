@@ -20,10 +20,7 @@ imageNameList = folderData['imagenameList']
 pathList = folderData['pathlist']
 expIDlist = folderData['expIDlist']
 
-rolloff = 64
-nChannels = 3
-zFirst = True
-bfAnomalyShiftVector = [2,-1]
+# experiment variables
 startIdx = 0
 globalExtrema = EMRyeast36.batchIntensityScale(
         folderData, channel=1, showProgress=True)
@@ -33,13 +30,25 @@ totalResults = []
 totalQC = []
 fieldsAnalyzed = []
 totalMcl = []
-rgbScalingFactors = [0.4,0.4]
-gryScalingFactors = [0.2,0.2]
+
+# local function parameters
+rolloff = 64
+nChannels = 3
+zFirst = True
+bwChannel = 2
+bfAnomalyShiftVector = [2,-1]
+minAngle = 22
+minLength = 5
+closeRadius = 3
+minBudSize = 75
 cortexWidth = 10
 bufferSize = 5
 showProgress = True
 mkrChannel = 0
 borderSize = 10
+rgbScalingFactors = [0.4,0.4]
+gryScalingFactors = [0.2,0.2]
+
 
 for field in range(nFields):
     print('starting image: ', imageNameList[field])
@@ -47,14 +56,16 @@ for field in range(nFields):
     dvImage = EMRyeast36.basicDVreader(pathList[field], rolloff, nChannels,
                                        zFirst)
     # find cells from brightfield step 1
-    bwCellZstack = EMRyeast36.makeCellzStack(dvImage,showProgress)
+    bwCellZstack = EMRyeast36.makeCellzStack(dvImage, bwChannel, showProgress)
     # find cells from brightfield step 2
     nZslices = dvImage.shape[1]        
     for z in range(nZslices):
         bwCellZstack[z,:,:] = EMRyeast36.correctBFanomaly(bwCellZstack[z,:,:],
                                        bfAnomalyShiftVector)
     # find cells from brightfield step 3
-    rawMcl = EMRyeast36.cellsFromZstack(bwCellZstack,showProgress)[0]
+    rawMcl = EMRyeast36.cellsFromZstack(bwCellZstack, showProgress,
+                                        minAngle, minLength,
+                                        closeRadius, minBudSize)[0]
     # find cells from brightfield step 4
     unbufferedMcl = EMRyeast36.bfCellMorphCleanup(rawMcl, showProgress)
     # unbufferedMcl is the best guess at the 'true outside edge' of the cells;
@@ -68,8 +79,7 @@ for field in range(nFields):
     masterCellLabel = EMRyeast36.merge_labelMcl(unbufferedMcl, buffer)
     cortexMclBuffered = EMRyeast36.merge_labelMcl(cortexMcl, buffer)
     # use Otsu thresholding on the max projection of mCh-Sec7 to find golgi
-    golgiMcl = EMRyeast36.labelMaxproj(masterCellLabel,
-                                       image=dvImage,mkrChannel)
+    golgiMcl = EMRyeast36.labelMaxproj(masterCellLabel, dvImage, mkrChannel)
     # subtract so that golgi localization has precedence over cortical
     # localization
     cortexMinusGolgi = EMRyeast36.subtract_labelMcl(cortexMclBuffered,golgiMcl)
