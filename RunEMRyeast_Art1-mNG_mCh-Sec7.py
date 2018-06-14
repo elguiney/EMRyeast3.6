@@ -63,11 +63,11 @@ for field in range(nFields):
         bwCellZstack[z,:,:] = EMRyeast36.correctBFanomaly(bwCellZstack[z,:,:],
                                        bfAnomalyShiftVector)
     # find cells from brightfield step 3
-    rawMcl = EMRyeast36.cellsFromZstack(bwCellZstack, showProgress,
-                                        minAngle, minLength,
-                                        closeRadius, minBudSize)[0]
+    rawMcl = EMRyeast36.cellsFromZstack(bwCellZstack, showProgress)[0]
     # find cells from brightfield step 4
-    unbufferedMcl = EMRyeast36.bfCellMorphCleanup(rawMcl, showProgress)
+    unbufferedMcl = EMRyeast36.bfCellMorphCleanup(rawMcl, showProgress,
+                                                  minAngle, minLength,
+                                                  closeRadius, minBudSize)
     # unbufferedMcl is the best guess at the 'true outside edge' of the cells;
     # use it as the starting point to find a 10pixel thick cortex
     cortexMcl = EMRyeast36.labelCortex_mcl(unbufferedMcl, cortexWidth)
