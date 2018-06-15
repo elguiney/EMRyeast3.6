@@ -740,6 +740,7 @@ def centroidCirclesMcl(mask, masterCellLabel, radius, iterations=1):
     maskProps = regionprops(maskLabels)
     newMask = np.zeros(mask.shape, dtype='bool')
     newMcl = np.zeros(mask.shape, dtype='int')
+    nRows,nCols = mask.shape
     for lbl in range(nlbl):
         y,x = maskProps[lbl].centroid
         # fix y,x if previous iterations have yielded a centroid point that is
@@ -752,6 +753,9 @@ def centroidCirclesMcl(mask, masterCellLabel, radius, iterations=1):
                 dist = ndimage.morphology.distance_transform_edt(dist)
                 y,x = np.unravel_index(np.argmax(dist),mask.shape)
         rr,cc = draw.circle(y, x, radius)
+        oobPixels = np.where((rr>=nRows) | (rr<0) | (cc>=nCols) | (cc<0))
+        rr = np.delete(rr,oobPixels)
+        cc = np.delete(cc,oobPixels)
         newMask[rr,cc] = 1
     if iterations > 1:
         for i in range(iterations-1):
