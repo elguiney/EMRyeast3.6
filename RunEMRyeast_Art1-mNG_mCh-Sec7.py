@@ -5,27 +5,20 @@ keeping; runs here as a script for better interactive debugging in sypder
 '''
 
 import EMRyeast36
-import pandas as pd
 import pickle
 import numpy as np
 import datetime
+import os
+
+import matplotlib.pyplot as plt
+import pandas as pd
 
 
 targetFolder = r"C:\Users\elgui\Documents\Emr Lab Post Doc\microscopy\2018-06-12_Art1Quant_exp1"
 
-print('beginning analysis of \n',targetFolder,'\n at ', datetime.datetime.now())
-folderData = EMRyeast36.batchParse(targetFolder, expIDloc=[0,6])
-nFields = folderData['nFields']
-imageNameList = folderData['imagenameList']
-pathList = folderData['pathlist']
-expIDlist = folderData['expIDlist']
 
 # experiment variables
 startIdx = 0
-globalExtrema = EMRyeast36.batchIntensityScale(
-        folderData, channel=1, showProgress=True)
-globalMin = globalExtrema['globalmin']
-globalMax = globalExtrema['globalmax']
 totalResults = []
 totalQC = []
 fieldsAnalyzed = []
@@ -46,11 +39,29 @@ bufferSize = 5
 showProgress = True
 mkrChannel = 0
 borderSize = 10
+golgiRadius = 7
 rgbScalingFactors = [0.4,0.4]
 gryScalingFactors = [0.2,0.2]
 
 
-for field in range(nFields):
+print('beginning analysis of \n',targetFolder,'\n at ', datetime.datetime.now())
+
+resultsDirectory = targetFolder + '/results/'
+if not os.path.exists(resultsDirectory):
+    os.makedirs(resultsDirectory)
+
+folderData = EMRyeast36.batchParse(targetFolder, expIDloc=[0,6])
+nFields = folderData['nFields']
+imageNameList = folderData['imagenameList']
+pathList = folderData['pathlist']
+expIDlist = folderData['expIDlist']
+globalExtrema = EMRyeast36.batchIntensityScale(
+        folderData, channel=1, showProgress=True)
+globalMin = globalExtrema['globalmin']
+globalMax = globalExtrema['globalmax']
+
+
+for field in range(3):
     print('starting image: ', imageNameList[field])
     # read image
     dvImage = EMRyeast36.basicDVreader(pathList[field], rolloff, nChannels,
@@ -80,16 +91,23 @@ for field in range(nFields):
     cortexMclBuffered = EMRyeast36.merge_labelMcl(cortexMcl, buffer)
     # use Otsu thresholding on the max projection of mCh-Sec7 to find golgi
     golgiMcl = EMRyeast36.labelMaxproj(masterCellLabel, dvImage, mkrChannel)
+    golgiCirclesMcl = EMRyeast36.centroidCirclesMcl(
+            golgiMcl.astype('bool'), masterCellLabel,
+            golgiRadius, iterations=20)
     # subtract so that golgi localization has precedence over cortical
     # localization
     cortexMinusGolgi = EMRyeast36.subtract_labelMcl(cortexMclBuffered,golgiMcl)
+    ctxMinusGolgiCC = EMRyeast36.subtract_labelMcl(cortexMclBuffered,
+                                                   golgiCirclesMcl)
     # prepare for measuring:
     # measure Art1-mNG in the middle z-slice
     primaryImage = {'Art1-mNG':dvImage[1,3,:,:]}
     # measure against buffered cortex, golgi, and non-golgi buffered cortex
     refMclDict = {'cortex(buffered)':cortexMclBuffered,
                   'golgi':golgiMcl,
-                  'nonGolgicortex(buffered)':cortexMinusGolgi
+                  'nonGolgicortex(buffered)':cortexMinusGolgi,
+                  'golgiCircles':golgiCirclesMcl,
+                  'nonGolgiCirclesCortext(buffered)':ctxMinusGolgiCC
                   }
     # also record field wide information
     expID = expIDlist[field]
@@ -104,26 +122,23 @@ for field in range(nFields):
     print('preparing quality control information')
     greenFluor = dvImage[1,3,:,:].astype(float)
     redFluor = np.amax(dvImage[0,:,:,:],axis=0).astype(float)
-    qcMclList = [cortexMinusGolgi,golgiMcl]
+    qcMclList = [ctxMinusGolgiCC,golgiCirclesMcl]
     rgbQC = EMRyeast36.prep_rgbQCImage(greenFluor, redFluor,
                                        qcMclList, rgbScalingFactors)
-    qcStack = EMRyeast36.prep_qcStack(rgbQC, masterCellLabel,
-                                      greenFluor, redFluor, gryScalingFactors,
-                                      startIdx, borderSize)
+
     # add qcStack to totalQC
-    totalQC = np.concatenate((totalQC,qcStack))
+    totalQC.append(rgbQC)
     # record field as analyzed
     fieldsAnalyzed.append(field)
     # save unbufferedMcl
     totalMcl.append(unbufferedMcl)
     # pool and save
     print('saving progress')
-    results = {'totalResults':totalResults,
+    
+    pickle.dump({'totalResults':totalResults,
                'totalQC':totalQC,
-               'totalMcl':totalMcl,
                'fieldsAnalyzed':fieldsAnalyzed
-               }
-    pickle.dump(results, open(targetFolder +
+               }, open(targetFolder +
             '\\results\\pooled_measurements.p', 'wb'))
     print(imageNameList[field],' complete at ',datetime.datetime.now())
     
