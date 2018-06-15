@@ -735,16 +735,33 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
     if showProgress: print('finsished')
     return labeledBuffer
 
-def centroidCirclesMcl(mask, masterCellLabel, radius):
+def centroidCirclesMcl(mask, masterCellLabel, radius, iterations=1):
     maskLabels, nlbl = ndimage.label(mask)
     maskProps = regionprops(maskLabels)
     newMask = np.zeros(mask.shape, dtype='bool')
     newMcl = np.zeros(mask.shape, dtype='int')
     for lbl in range(nlbl):
         y,x = maskProps[lbl].centroid
+        # fix y,x if previous iterations have yielded a centroid point that is
+        # not inside the mask region
+        if not mask[int(y),int(x)]:
+            dist = np.zeros(mask.shape, dtype='int')
+            dist[maskLabels == lbl+1] = 1
+            dist = ndimage.binary_erosion(dist)
+            if np.sum(dist) > 1:
+                dist = ndimage.morphology.distance_transform_edt(dist)
+                y,x = np.unravel_index(np.argmax(dist),mask.shape)
         rr,cc = draw.circle(y, x, radius)
         newMask[rr,cc] = 1
-    newMcl[newMask] = masterCellLabel[newMask]
+    if iterations > 1:
+        for i in range(iterations-1):
+            residual = np.copy(mask)
+            residual[newMask] = 0
+            residualMask = centroidCirclesMcl(
+                    residual, masterCellLabel,
+                    radius, iterations=1).astype('bool')
+            newMask[residualMask] = 1            
+    newMcl[newMask] = masterCellLabel[newMask]            
     return newMcl
         
 
