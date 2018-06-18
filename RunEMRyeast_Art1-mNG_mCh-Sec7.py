@@ -111,8 +111,8 @@ for field in range(nFields):
     expID = expIDlist[field]
     imageName = imageNameList[field]
     # measure
-    results,startIdx = EMRyeast36.measure_cells(primaryImage, masterCellLabel,
-                                 refMclDict, imageName, expID, fieldIdx,
+    results = EMRyeast36.measure_cells(primaryImage, masterCellLabel,
+                                 refMclDict, imageName, expID, field,
                                  globalMin, globalMax, showProgress)
     # add measurements from each field to total results
     totalResults = np.concatenate((totalResults,results))
