@@ -770,7 +770,7 @@ def centroidCirclesMcl(mask, masterCellLabel, radius, iterations=1):
         
 
 def measure_cells(primaryImage, masterCellLabel, refMclDict,
-                  imageName, expID, startIdx,
+                  imageName, expID, fieldIdx,
                   globalMin, globalMax, showProgress):
     '''
     measurement function
@@ -812,20 +812,23 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
     refNames = [key for key in refMclDict]
     #measurment loop
     for cellidx in range(nCells):
-        cellID = cellidx + 1
+        cellLbl = cellidx + 1
         # write image specific identifiers
-        measurements = {'imageName':imageName, 'expID':expID}
-        # write experiment wide unique index
-        measurements['index'] = startIdx + cellidx
+        measurements = {'imageName':imageName,
+                        'expID':expID,
+                        'localLbl':cellLbl,
+                        'fieldIdx':fieldIdx,
+                        'qcStatus':'unreviewed',
+                        'qcTimestamp':[]}
         # define basic cell wide measurements
-        totalIntDen = (fluorBkgCorr[np.abs(masterCellLabel) == cellID]).sum()
-        totalArea = (np.abs(masterCellLabel) == cellID).sum()
+        totalIntDen = (fluorBkgCorr[np.abs(masterCellLabel) == cellLbl]).sum()
+        totalArea = (np.abs(masterCellLabel) == cellLbl).sum()
         totalBrightness = totalIntDen / totalArea
         # measure fluorescence at bud, if present
-        if -cellID in masterCellLabel:
+        if -cellLbl in masterCellLabel:
             budFound = True
-            budIntDen = (fluorBkgCorr[masterCellLabel == -cellID]).sum()
-            budArea = (masterCellLabel == -cellID).sum()
+            budIntDen = (fluorBkgCorr[masterCellLabel == -cellLbl]).sum()
+            budArea = (masterCellLabel == -cellLbl).sum()
             budBrightness = budIntDen / budArea
         else:
             budFound = False
@@ -833,15 +836,15 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
         # measure fluorescen at masks
         for refKey in refNames:
             refMcl = refMclDict[refKey]
-            refIntDen = (fluorBkgCorr[np.abs(refMcl) == cellID]).sum()
-            refArea = np.sum(np.abs(refMcl) == cellID)
+            refIntDen = (fluorBkgCorr[np.abs(refMcl) == cellLbl]).sum()
+            refArea = np.sum(np.abs(refMcl) == cellLbl)
             if refArea != 0:
                 refBrightness = refIntDen / refArea
             else:
                 refBrightness = 0
             if budFound:
-                budrefIntDen = (fluorBkgCorr[refMcl == cellID]).sum()
-                budrefArea = (refMcl == -cellID).sum()
+                budrefIntDen = (fluorBkgCorr[refMcl == cellLbl]).sum()
+                budrefArea = (refMcl == -cellLbl).sum()
                 if budrefArea != 0:
                     budrefBrightness = budrefIntDen / budrefArea
                 else:
@@ -864,10 +867,9 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
         measurements['bud_area'] = budArea
         measurements['bud_' + fluorName + '_brightness'] = budBrightness
         results.append(measurements)
-        if showProgress: progressBar_text(cellID,nCells,'measuring')
+        if showProgress: progressBar_text(cellLbl,nCells,'measuring')
     if showProgress: print()
-    nextStartIndex = nCells    
-    return results, nextStartIndex
+    return results
     
 #prepare qc image
 def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
@@ -896,9 +898,9 @@ def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     return(rgbQC)
             
 def make_qcFrame(rgbQC, greenFluor, redFluor, masterCellLabel,
-                 cellIdx, scalingFactors, borderSize):
+                 cellLbl, scalingFactors, borderSize):
     mask = np.zeros(masterCellLabel.shape, dtype='uint8')
-    mask[np.abs(masterCellLabel) == cellIdx] = 1
+    mask[np.abs(masterCellLabel) == cellLbl] = 1
     cellProps = regionprops(mask)
     nRows,nCols = masterCellLabel.shape
     ymin,xmin,ymax,xmax = cellProps[0].bbox
