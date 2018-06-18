@@ -17,12 +17,6 @@ import pandas as pd
 targetFolder = r"C:\Users\elgui\Documents\Emr Lab Post Doc\microscopy\2018-06-12_Art1Quant_exp1"
 
 
-# experiment variables
-startIdx = 0
-totalResults = []
-totalQC = []
-fieldsAnalyzed = []
-totalMcl = []
 
 # local function parameters
 rolloff = 64
@@ -45,6 +39,11 @@ gryScalingFactors = [0.2,0.2]
 
 
 print('beginning analysis of \n',targetFolder,'\n at ', datetime.datetime.now())
+# initialize experiment variables
+totalResults = []
+totalQC = []
+fieldsAnalyzed = []
+totalMcl = []
 
 resultsDirectory = targetFolder + '/results/'
 if not os.path.exists(resultsDirectory):
@@ -60,8 +59,7 @@ globalExtrema = EMRyeast36.batchIntensityScale(
 globalMin = globalExtrema['globalmin']
 globalMax = globalExtrema['globalmax']
 
-
-for field in range(3):
+for field in range(nFields):
     print('starting image: ', imageNameList[field])
     # read image
     dvImage = EMRyeast36.basicDVreader(pathList[field], rolloff, nChannels,
@@ -93,7 +91,7 @@ for field in range(3):
     golgiMcl = EMRyeast36.labelMaxproj(masterCellLabel, dvImage, mkrChannel)
     golgiCirclesMcl = EMRyeast36.centroidCirclesMcl(
             golgiMcl.astype('bool'), masterCellLabel,
-            golgiRadius, iterations=20)
+            golgiRadius, iterations=5)
     # subtract so that golgi localization has precedence over cortical
     # localization
     cortexMinusGolgi = EMRyeast36.subtract_labelMcl(cortexMclBuffered,golgiMcl)
@@ -114,7 +112,7 @@ for field in range(3):
     imageName = imageNameList[field]
     # measure
     results,startIdx = EMRyeast36.measure_cells(primaryImage, masterCellLabel,
-                                 refMclDict, imageName, expID, startIdx,
+                                 refMclDict, imageName, expID, fieldIdx,
                                  globalMin, globalMax, showProgress)
     # add measurements from each field to total results
     totalResults = np.concatenate((totalResults,results))
@@ -130,15 +128,18 @@ for field in range(3):
     totalQC.append(rgbQC)
     # record field as analyzed
     fieldsAnalyzed.append(field)
-    # save unbufferedMcl
-    totalMcl.append(unbufferedMcl)
+    # save masterCellLabel
+    totalMcl.append(masterCellLabel)
     # pool and save
     print('saving progress')
     
     pickle.dump({'totalResults':totalResults,
                'totalQC':totalQC,
-               'fieldsAnalyzed':fieldsAnalyzed
-               }, open(targetFolder +
-            '\\results\\pooled_measurements.p', 'wb'))
+               'fieldsAnalyzed':fieldsAnalyzed,
+               'totalMcl':totalMcl
+               }, open(targetFolder 
+                       + '/results/'
+                       + str(datetime.datetime.now().date()) 
+                       + '_analysis.p', 'wb'))
     print(imageNameList[field],' complete at ',datetime.datetime.now())
     
