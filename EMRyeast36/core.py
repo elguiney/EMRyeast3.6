@@ -3,7 +3,7 @@ EMRyeast36_v0.1
 
 Emr lab image analysis module
 adapted for python 3.6
-contains endocytosis profiling modules (vacmorph, vacmorph advanced) -not yet 
+contains endocytosis profiling modules (vacmorph, vacmorph advanced) -not yet
     tested
 extends methods to quantify flourescence localization against two markers
     A) higher precision cortex localization from bright field image
@@ -30,11 +30,11 @@ import basicText2im
 
 def batchParse(targetFolder, expIDloc, imageExtension='R3D_D3D.dv'):
     '''updated parser based on EMRyeastv2 parser
-    
+
     targetFolder: path to the top level analysis folder
     imageExtension: terminating characters of images to includ in analysis.
         defaults to "R3D_D3D.dv", the flag and extension deltavision software
-    
+
     '''
     pathlist = []
     imagenameList = []
@@ -73,13 +73,13 @@ def batchIntensityScale(folderData, channel, showProgress=True):
     return result
 
 def basicDVreader(imagePath, rolloff, nChannels=3, zFirst=True):
-    ''' very simple function to read .dv files as formatted by deltavision 
-    microscopes. 
-    
+    ''' very simple function to read .dv files as formatted by deltavision
+    microscopes.
+
     imagePath is the complete file path of the image
     for deconvolved images, rolloff specifies the width of the border in pixels
         to be cropped before further processing
-    nChannels (defualt 3) is the number of fluorescence and bright field 
+    nChannels (defualt 3) is the number of fluorescence and bright field
         channels
     zFirst (default True); boolean, is the the order of the .dv tiff stack z-
         first or channel-first (often, zFirst = True for R3D_D3D, zFirst = False
@@ -107,29 +107,29 @@ def basicDVreader(imagePath, rolloff, nChannels=3, zFirst=True):
 def findLogZeros(image, logKernelSize, gradKernelSize, gradstrength,
                  gradmethod='any'):
     ''' improved implementation of find log zeros.
-    use np.diff of np.signbit to detect sign changes.  
-    about 20 times faster than a loop like: 
+    use np.diff of np.signbit to detect sign changes.
+    about 20 times faster than a loop like:
         for y in range(ySize):
             for x in range(xSize):
-                
+
     Also, keep track of positive gradient and negative gradient, and shift
-    appropriately so all edges are on the negative side of a zero contour, 
+    appropriately so all edges are on the negative side of a zero contour,
     rather than always appearing below/right of a zero, as is default behavior
     for np.diff and the old for-loop logZeros method.
-    
+
     to find all zeros, set gradstrength to 0.
-    
+
     gradmethod:
         'any' returns all edges where any pixel is greater than gradstrength
         'mean' returns all edges where the average gradient is greater than
             gradsthrength. 'mean' may be computationally quite taxing.
-    
+
     to find typical cell edges from a brightfield image,
     logKernelSize = 4
     gradKernelSize = 2
     gradstrength = 0.05
     gradmethod = 'any'
-    
+
     to find typical fluorescence features,
     logKernelSize = 2.5
     gradKernelSize = 2.5
@@ -140,7 +140,7 @@ def findLogZeros(image, logKernelSize, gradKernelSize, gradstrength,
     scaledImage = ((image.astype('float64') - image.min()) /
                    (image.max() - image.min()))
     #laplace of gaussian
-    log = ndimage.gaussian_laplace(scaledImage, logKernelSize) 
+    log = ndimage.gaussian_laplace(scaledImage, logKernelSize)
     # initialize for zeros of laplace of gaussian
     logZeros = np.zeros(log.shape, np.bool)
     xZerosRaw = np.diff(np.signbit(log).astype(int),axis=1) # row zeros
@@ -160,8 +160,8 @@ def findLogZeros(image, logKernelSize, gradKernelSize, gradstrength,
     # discarding any edge as specified by gradmethod
     grad = ndimage.gaussian_gradient_magnitude(scaledImage, gradKernelSize)
     lbl_logZeros, nEdges = ndimage.label(logZeros,
-                                         [[1, 1, 1], 
-                                          [1, 1, 1], 
+                                         [[1, 1, 1],
+                                          [1, 1, 1],
                                           [1, 1, 1]])
     if gradmethod == 'mean':
         for edge in range(nEdges):
@@ -262,7 +262,7 @@ def cellsFromZstack(bwCellZstack, showProgress=True):
     return masterCellLabel.astype('uint16'), stackData
 
 def mergeForTiff(imageList):
-    ''' helper function to format a list of 2d-images, all with matching x,y 
+    ''' helper function to format a list of 2d-images, all with matching x,y
     dimensions, into a single multichannel image for exporting as a .tiff
     bare bones
     expects a list like [img1,img2,img3]
@@ -299,7 +299,7 @@ def mergeForImshow(imageList):
     imshowStack = np.concatenate([img.reshape(nRows,nCols,1)
                                   for img in image8bitb], axis=2)
     return imshowStack
-                        
+
 
 def correctBFanomaly(binaryCellMask, shiftVector):
     ''' correct for systematic optical bias between brightfield image and
@@ -329,30 +329,30 @@ def correctBFanomaly(binaryCellMask, shiftVector):
 def edgeLabel(cellMask):
     ''' takes a single identified cell, cellMask, and returns a list of pixels
     along the perimiter, ordered going clockwise around the cell.
-    
+
     in the cell below, with perimiter marked with letters, and inside #'s,
-    search begins for starting point (c) and proceeds clockwise from * 
-    .*......                                     
-    ..cde...    =>       0 1 2           
-    ab###fg.             7 c 3                   
+    search begins for starting point (c) and proceeds clockwise from *
+    .*......
+    ..cde...    =>       0 1 2
+    ab###fg.             7 c 3
     #######h             6 5 4
-    
-    identifying d as the next point along the perimiter. the search continues 
-    iteratively, always clockwise from immediately after the previous starting 
+
+    identifying d as the next point along the perimiter. the search continues
+    iteratively, always clockwise from immediately after the previous starting
     point
-    
-    y,x coordinates are stored as a list of (y,x) tuples with the ith tuple 
+
+    y,x coordinates are stored as a list of (y,x) tuples with the ith tuple
     marking the ith point encountered clockwise around the cell.
-    
+
     '''
-    
+
     cellMask_nz = np.nonzero(cellMask)
-    # set initial y and x search position    
+    # set initial y and x search position
     yInt = cellMask_nz[0][0]
     xInt = cellMask_nz[1][0]
     yS = yInt
     xS = xInt
-    
+
     # setup search variables
     go = True
     startPos = 0
@@ -360,24 +360,24 @@ def edgeLabel(cellMask):
     deltaY =  [-1,-1,-1, 0, 0, 0, 1, 1, 1]
     deltaX =  [-1, 0, 1,-1, 0, 1,-1, 0, 1]
     newStart =[ 5, 6, 7, 4, 8, 0, 3, 2, 1]
-    # initialize edge label    
+    # initialize edge label
     edgeLabels = []
 
-    
+
     while go:
         tempPattern = pattern[startPos:]+pattern[:startPos]
         edgeLabels.append((yS,xS)) # record indices
-        # temporarily store old indices        
+        # temporarily store old indices
         yL = yS
         xL = xS
         # find next indices:
         # get the neighborhood of the search position
-        nbhd = cellMask[yS-1:yS+2,xS-1:xS+2] 
+        nbhd = cellMask[yS-1:yS+2,xS-1:xS+2]
         nbhd_flat = np.ndarray.flatten(nbhd)
         # convert to clockwise list
-        nbhd_flat_cw = [nbhd_flat[i] for i in tempPattern] 
+        nbhd_flat_cw = [nbhd_flat[i] for i in tempPattern]
         next_idx = tempPattern[np.nonzero(nbhd_flat_cw)[0][0]]
-        # update yS and xS        
+        # update yS and xS
         yS = yL + deltaY[next_idx]
         xS = xL + deltaX[next_idx]
         # update startPos
@@ -385,14 +385,14 @@ def edgeLabel(cellMask):
         if (yS == yInt) & (xS == xInt):
             go = False
     return edgeLabels
-    
+
 def angleFinder(cellMask,edgeLabels,lineLength=[4,7]):
     ''' takes a single identified cell (cellMask), along with a clockwise
-    perimiter map from edgeLabel. Finds the local curvature along the 
-    perimiter.lineLength is the distance range from each point at which 
+    perimiter map from edgeLabel. Finds the local curvature along the
+    perimiter.lineLength is the distance range from each point at which
     curvature is calculated.
     in the example below, where "." is external space and "#" the inside of a
-    cell, with the default lineLength = [4,7], the angle at g is the average 
+    cell, with the default lineLength = [4,7], the angle at g is the average
     of a\g/m, b\g/l and c\g/k; while with a lineLength = [2,3] it is e\g/i.
 
     ................
@@ -400,8 +400,8 @@ def angleFinder(cellMask,edgeLabels,lineLength=[4,7]):
     ab.......j####op
     ##cde..hi#######
     #####fg#########
-    
-    curvature sign is defined so that convex regions of the perimiter have 
+
+    curvature sign is defined so that convex regions of the perimiter have
     positive curvature'''
 
     perimLength = len(edgeLabels)
@@ -416,7 +416,7 @@ def angleFinder(cellMask,edgeLabels,lineLength=[4,7]):
         yRev = [edgeLabels[i][0]-y for i in reversed(lkpRev)]
         xRev = [edgeLabels[i][1]-x for i in reversed(lkpRev)]
         thetaList = np.array([np.arctan2(yRev[j],xRev[j])
-                             -np.arctan2(yFor[j],xFor[j]) 
+                             -np.arctan2(yFor[j],xFor[j])
                              for j in range(len(lkpFor))])
         thetaList = np.pi - np.mod(thetaList,2*np.pi)
         newTheta = np.mean(thetaList)
@@ -429,20 +429,20 @@ def angleFinder(cellMask,edgeLabels,lineLength=[4,7]):
         localThetas.append(newTheta)
     return localThetas
 
-def bfCellMorphCleanup(mcl, showProgress, 
-                       minAngle=22, minLength=5, 
+def bfCellMorphCleanup(mcl, showProgress,
+                       minAngle=22, minLength=5,
                        closeRadius=3, minBudSize = 75):
-    ''' 
+    '''
     process mcl, a labeled master cell list np-array from
     EMRyeast.cellsFromZstack().
     measures morphology and identifies buds, cleans up cell outlines
-    (1) Cleans up mcl with a binary closing to remove edge-holes, using 
-        closeRadius to create a disk structuring element        
-    (2) Uses EMRyeast.edgeLabel() and EMRyeast.angleFinder() to identify 
-    regions of negative curvature    
+    (1) Cleans up mcl with a binary closing to remove edge-holes, using
+        closeRadius to create a disk structuring element
+    (2) Uses EMRyeast.edgeLabel() and EMRyeast.angleFinder() to identify
+    regions of negative curvature
         - regions of negative curvature are checked for the following
         a) minimum length (default minLength = 5 pixels)
-        b) minimum curvature (averaged across the region, default minAngle = 
+        b) minimum curvature (averaged across the region, default minAngle =
         22 degrees)
     (3) a) cells with no regions of negative curvature are left as is (usually,
         these are unbudded cells))
@@ -450,19 +450,19 @@ def bfCellMorphCleanup(mcl, showProgress,
         result from bright field optical artifacts where two cells are closely
         apposed (at a late bud neck, or between closely clumped cells). These
         are repaired by a convex hull.
-        c) For cells with exactly two negative curvature regions, segment 
+        c) For cells with exactly two negative curvature regions, segment
         between to produce a bud and mother
         d) For cells with more than two negative curvature regions, segment
         between two most negative regions (usually these are the neck), then
         convex hull the remaining.
-    (4) Outputs:        
-        resegmented cleanedMcl, with new labels. 
+    (4) Outputs:
+        resegmented cleanedMcl, with new labels.
         does not match labels from input mcl.
         mother cells are identified with a positive integer label
         corresponding buds are labeled with -1 * mother_label
     '''
-        
-    minAngleRads = (float(minAngle)/180*np.pi)    
+
+    minAngleRads = (float(minAngle)/180*np.pi)
     closeStruct = morph.disk(closeRadius,dtype='float')
     cleanedMcl = np.zeros(np.shape(mcl),dtype='int16')
     #resegment mcl
@@ -470,7 +470,7 @@ def bfCellMorphCleanup(mcl, showProgress,
     relabeledMcl, nCells = ndimage.label(flatMcl)
     idxOffset = 0
     for cell in range(nCells):
-        cellIdx = cell + 1    
+        cellIdx = cell + 1
         masterCellMask = np.zeros(np.shape(mcl), dtype='bool')
         masterCellMask[relabeledMcl==cellIdx] = 1
         try:
@@ -485,7 +485,7 @@ def bfCellMorphCleanup(mcl, showProgress,
             cellMask[cmsk_lbls!=np.argmax(sizes)+1]=0
             edgeLabels = edgeLabel(cellMask)
             localThetas = np.array(angleFinder(cellMask,edgeLabels))
-            ''' prep localThetas for finding curves by 
+            ''' prep localThetas for finding curves by
             (1) wrapping the end and (2) replacing zeros with small values '''
             curveZeros = np.where(np.diff(np.sign(np.append(localThetas,
                                                             localThetas[0]))))[0]
@@ -493,18 +493,18 @@ def bfCellMorphCleanup(mcl, showProgress,
             based on geometry of edgeLabel()'''
             negCurves = np.reshape(curveZeros,(-1,2))
             negCurveLengths = np.diff(negCurves)
-            nNegCurves = int(len(curveZeros)/2)      
-            negCurveAngles = np.zeros(nNegCurves)        
-            # check morphology 
+            nNegCurves = int(len(curveZeros)/2)
+            negCurveAngles = np.zeros(nNegCurves)
+            # check morphology
             for idx in range(nNegCurves):
-                negCurveAngles[idx] = np.mean([localThetas[i+1] 
+                negCurveAngles[idx] = np.mean([localThetas[i+1]
                                                for i in range(negCurves[idx,0],
                                                               negCurves[idx,1])])
             # find goodCurves, convex regions with stronger curvature than minAngle
             # these are either the edges of the bud neck, or bright field artifacts
-            goodCurves = np.where(((negCurveLengths > minLength).T 
+            goodCurves = np.where(((negCurveLengths > minLength).T
                                    & (negCurveAngles < -minAngleRads))[0])[0]
-            nCurves = len(goodCurves) 
+            nCurves = len(goodCurves)
             if nCurves == 0:
                 # write to cleanedMcl without alteration
                 cleanedMcl[box[0]-1:box[2]+1,
@@ -530,7 +530,7 @@ def bfCellMorphCleanup(mcl, showProgress,
                 newCells, nlbl = ndimage.label(cellMask)
                 # if segmentation produced a 'bud' below the budsize cutoff, it is
                 # likely an error. take the convex hull instead.
-                sizes = np.array([len(newCells[newCells==idx+1]) 
+                sizes = np.array([len(newCells[newCells==idx+1])
                                   for idx in range(nlbl)])
                 largest = np.argmax(sizes)+1
                 if sum(newCells.astype('bool')[newCells!=largest]) < minBudSize:
@@ -564,7 +564,7 @@ def bfCellMorphCleanup(mcl, showProgress,
                 newCells, nlbl = ndimage.label(cellMask)
                 # if segmentation produced a 'bud' below the budsize cutoff, it is
                 # likely an error. take the convex hull instead.
-                sizes = np.array([len(newCells[newCells==idx+1]) 
+                sizes = np.array([len(newCells[newCells==idx+1])
                                   for idx in range(nlbl)])
                 largest = np.argmax(sizes)+1
                 if sum(newCells.astype('bool')[newCells!=largest]) < minBudSize:
@@ -593,7 +593,7 @@ def bfCellMorphCleanup(mcl, showProgress,
                     cleanedMcl[box[0]-1:box[2]+1,
                                box[1]-1:box[3]+1][cleanup==second]=-cellIdx
             # check for stranded buds, remove them
-            
+
         # if nothing works, just delete the cell
         except:
             cleanedMcl[masterCellMask] = 0
@@ -611,7 +611,7 @@ def progressBar_text(index,nIndices,processName):
     sys.stdout.write('\r')
     sys.stdout.write("%s:[%-20s] %d%%" % dispText)
     sys.stdout.flush()
-    
+
 def progressSpinner_text(index,processName,indexType):
     dispText = (processName + '- progress',
                 r'—\|/'[index%4],
@@ -623,18 +623,18 @@ def progressSpinner_text(index,processName,indexType):
 
 def labelCortex_mcl(masterCellLabel, cortexWidth):
     '''
-    Generate labeled mask of cell cortical region, using masterCellLabel (with 
+    Generate labeled mask of cell cortical region, using masterCellLabel (with
     numbered cells, buds as -1*[mother_label])
     '''
     erosion = ndimage.binary_erosion(masterCellLabel,morph.disk(cortexWidth))
-    cortexMcl = (masterCellLabel 
+    cortexMcl = (masterCellLabel
                  - np.multiply(erosion.astype(int), masterCellLabel))
     return cortexMcl
 
 def labelMaxproj(masterCellLabel, image, mkrChannel):
     '''
     Early version of colocalization marker label;
-    uses Otsu's threshold of maximum projection of marker stack; assumes 
+    uses Otsu's threshold of maximum projection of marker stack; assumes
     insubstantial photobleaching
     '''
     mkrZstk = image[mkrChannel,:,:,:]
@@ -676,7 +676,7 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
     #build borders in loop to maintain overlaps
     for cellIdx in uniqueLabels:
         tablet[unbufferedMcl == cellIdx] = 1
-        #dilate each cell by the bufferSize, then add two more dilations to 
+        #dilate each cell by the bufferSize, then add two more dilations to
         #ensure segmentation of regions that touch but do not overlap at the
         #requested buffer size
         tablet = ndimage.binary_dilation(tablet, iterations=bufferSize +2)
@@ -700,7 +700,7 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
     overlapsSklt_conn[overlapsSkeleton == 0] = 0
     ovlpSklt_tipY,ovlpSklt_tipX = np.where(overlapsSklt_conn == 1)
     distBuffCells = ndimage.morphology.distance_transform_cdt(
-            ndimage.binary_dilation(bufferedCells).astype('int'))            
+            ndimage.binary_dilation(bufferedCells).astype('int'))
     #second, loop through edges and find nearest descending distance_transform
     #point, update skeleton, and continue until new edge is at a distance == 1
     yPattern = np.array([-1,-1,-1, 0, 1, 1, 1, 0],dtype=int)
@@ -764,37 +764,37 @@ def centroidCirclesMcl(mask, masterCellLabel, radius, iterations=1):
             residualMask = centroidCirclesMcl(
                     residual, masterCellLabel,
                     radius, iterations=1).astype('bool')
-            newMask[residualMask] = 1            
-    newMcl[newMask] = masterCellLabel[newMask]            
+            newMask[residualMask] = 1
+    newMcl[newMask] = masterCellLabel[newMask]
     return newMcl
-        
+
 
 def measure_cells(primaryImage, masterCellLabel, refMclDict,
                   imageName, expID, fieldIdx,
                   globalMin, globalMax, showProgress):
     '''
     measurement function
-    measures fluorescence intensity in the primaryImage for each cell in the 
+    measures fluorescence intensity in the primaryImage for each cell in the
     masterCellLabel image, and measures subcellular fluorescence as specified
     in any number of refMcls specified in the refMclDict
-    
-    primary image is a dictionary consisting of the name of the image, 
-    (ie, Art1-mNG) and a single z-section fluorescence image. The name should 
-    not change across an experiment (ie, don't use Art1-mNG for one set of 
+
+    primary image is a dictionary consisting of the name of the image,
+    (ie, Art1-mNG) and a single z-section fluorescence image. The name should
+    not change across an experiment (ie, don't use Art1-mNG for one set of
     images and Art1(K486R)-mNG for another)
-    
-    masterCellLabel/refMcl format is an extension of the 
-    skdimage.measure.regionprops labeled image; background regions are 0, each 
+
+    masterCellLabel/refMcl format is an extension of the
+    skdimage.measure.regionprops labeled image; background regions are 0, each
     cell is a unique ascending integer. Mother/bud pairs are positive/negative
-    respectively. refMcl's should have the same numbering scheme as the 
+    respectively. refMcl's should have the same numbering scheme as the
     masterCellLabel. refMclDict is a standard dictionary with the names of each
     refMcl to be used.
-    
+
     Images are rescaled to experiment wide min,max values; background is
     the modal fluorescence intensity after binning into 256 bins between global
     min and max.
-    
-    Outputs to a list of dictionaries for easy import into pandas; optionally 
+
+    Outputs to a list of dictionaries for easy import into pandas; optionally
     provide imageName and expID to populate these values. For experiment wide
     indexing, provide startIdx to continue labeling cells sequentially across
     the entire experiment.
@@ -870,7 +870,7 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
         if showProgress: progressBar_text(cellLbl,nCells,'measuring')
     if showProgress: print()
     return results
-    
+
 #prepare qc image
 def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     rgbList=[0,0,0]
@@ -885,7 +885,7 @@ def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     for idx in range(2):
         fluor = [redFluor,greenFluor][idx]
         fluor = fluor.astype('float')
-        scaled = 255*((fluor-fluor.min()) 
+        scaled = 255*((fluor-fluor.min())
                   / (scalingFactors[idx]*(fluor.max()-fluor.min())))
         scaled[scaled>255] = 255
         scaled = scaled.astype('uint8').reshape(ySize,xSize,1)
@@ -896,7 +896,7 @@ def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     rgbList[1][mask_two_edge.reshape(ySize,xSize,1)]=255
     rgbQC = np.concatenate(rgbList, axis=2)
     return(rgbQC)
-            
+
 def make_qcFrame(rgbQC, greenFluor, redFluor, masterCellLabel,
                  cellLbl, scalingFactors, borderSize):
     mask = np.zeros(masterCellLabel.shape, dtype='uint8')
@@ -937,14 +937,15 @@ def make_qcFrame(rgbQC, greenFluor, redFluor, masterCellLabel,
     greenInvFrame = greenInv[ytop:ytop+squareSide,xtop:xtop+squareSide]
     qcDict = {'qcFrame':qcFrame,
               'redInvFrame':redInvFrame,
-              'greenInvFrame':greenInvFrame}    
+              'greenInvFrame':greenInvFrame}
     return qcDict
-    
+
 def display_qcFrame(qcDict,frameTitles):
     qcFrame = qcDict['qcFrame']
     redInvFrame = qcDict['redInvFrame']
     greenInvFrame = qcDict['greenInvFrame']
     frameSize = len(redInvFrame)
+    fig = plt.figure(figsize=(12,8))
     qcAx = plt.subplot2grid((2,3), (0,0), rowspan=2, colspan=2)
     plt.imshow(qcFrame)
     qcAx.axis('off')
