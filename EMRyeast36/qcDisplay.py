@@ -1,6 +1,6 @@
 import ipywidgets as widgets
 from ipywidgets import Layout
-from IPython.display import clear_output, display
+from IPython.display import clear_output
 import numpy as np
 import matplotlib.pyplot as plt
 import EMRyeast36
@@ -32,6 +32,35 @@ def makeQCoutputs():
             border='solid'))
     return out1, out2
 
+def frameDisplay(qcDict,frameTitles):
+    qcFrame = qcDict['qcFrame']
+    redInvFrame = qcDict['redInvFrame']
+    greenInvFrame = qcDict['greenInvFrame']
+    frameSize = len(redInvFrame)
+    fig = plt.figure(figsize=(12,8))
+    qcAx = plt.subplot2grid((2,3), (0,0), rowspan=2, colspan=2)
+    qcAx.imshow(qcFrame)
+    qcAx.axis('off')
+    plt.title('Main display: blinded cell idx = '+str(randLookup))
+    redAx = plt.subplot2grid((2,3), (0,2))
+    redAx.imshow(redInvFrame, cmap='gray')
+    redAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
+    redAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
+    redAx.xaxis.set_ticklabels([])
+    redAx.yaxis.set_ticklabels([])
+    redAx.grid()
+    plt.title(frameTitles[0])
+    grnAx = plt.subplot2grid((2,3), (1,2))
+    grnAx.imshow(greenInvFrame, cmap='gray')
+    grnAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
+    grnAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
+    grnAx.xaxis.set_ticklabels([])
+    grnAx.yaxis.set_ticklabels([])
+    grnAx.grid()
+    plt.title(frameTitles[1])
+    clear_output(wait=True)
+    plt.show()
+    
 def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
                           frameTitles):
     global randLookup
@@ -73,34 +102,8 @@ def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
         else:
             randLookup += 1
             qcDict = makeQC_Art1mNG(randLookup,resultsData,df)
-            qcFrame = qcDict['qcFrame']
-            redInvFrame = qcDict['redInvFrame']
-            greenInvFrame = qcDict['greenInvFrame']
-            frameSize = len(redInvFrame)
             with out1:
-                fig = plt.figure(figsize=(12,8))
-                qcAx = plt.subplot2grid((2,3), (0,0), rowspan=2, colspan=2)
-                qcAx.imshow(qcFrame)
-                qcAx.axis('off')
-                plt.title('Main display: blinded cell idx = '+str(randLookup))
-                redAx = plt.subplot2grid((2,3), (0,2))
-                redAx.imshow(redInvFrame, cmap='gray')
-                redAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
-                redAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
-                redAx.xaxis.set_ticklabels([])
-                redAx.yaxis.set_ticklabels([])
-                redAx.grid()
-                plt.title(frameTitles[0])
-                grnAx = plt.subplot2grid((2,3), (1,2))
-                grnAx.imshow(greenInvFrame, cmap='gray')
-                grnAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
-                grnAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
-                grnAx.xaxis.set_ticklabels([])
-                grnAx.yaxis.set_ticklabels([])
-                grnAx.grid()
-                plt.title(frameTitles[1])
-                clear_output(wait=True)
-                plt.show()
+                frameDisplay(qcDict,frameTitles)
             with out2:
                 out2.clear_output()
             with out2:
@@ -129,34 +132,7 @@ def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
             randLookup += 1
             qcDict = makeQC_Art1mNG(randLookup,resultsData,df)
             with out1:
-                qcFrame = qcDict['qcFrame']
-                redInvFrame = qcDict['redInvFrame']
-                greenInvFrame = qcDict['greenInvFrame']
-                frameSize = len(redInvFrame)
-                fig = plt.figure(figsize=(12,8))
-                qcAx = plt.subplot2grid((2,3), (0,0), rowspan=2, colspan=2)
-                qcAx.imshow(qcFrame)
-                qcAx.axis('off')
-                plt.title('Main display: blinded cell idx = '+str(randLookup))
-                redAx = plt.subplot2grid((2,3), (0,2))
-                redAx.imshow(redInvFrame, cmap='gray')
-                redAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
-                redAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
-                redAx.xaxis.set_ticklabels([])
-                redAx.yaxis.set_ticklabels([])
-                redAx.grid()
-                plt.title(frameTitles[0])
-                grnAx = plt.subplot2grid((2,3), (1,2))
-                grnAx.imshow(greenInvFrame, cmap='gray')
-                grnAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
-                grnAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
-                grnAx.xaxis.set_ticklabels([])
-                grnAx.yaxis.set_ticklabels([])
-                grnAx.grid()
-                plt.title(frameTitles[1])
-                
-                clear_output(wait=True)
-                plt.show()
+                frameDisplay(qcDict,frameTitles)
             with out2:
                 out2.clear_output()
             with out2:
@@ -176,34 +152,8 @@ def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
         pastStatus = [status_list[pastloc] for 
                       pastloc in indexArray[max(0,randLookup-5):randLookup+1]]
         qcDict = makeQC_Art1mNG(randLookup,resultsData,df)
-        qcFrame = qcDict['qcFrame']
-        redInvFrame = qcDict['redInvFrame']
-        greenInvFrame = qcDict['greenInvFrame']
-        frameSize = len(redInvFrame)
         with out1:
-            fig = plt.figure(figsize=(12,8))
-            qcAx = plt.subplot2grid((2,3), (0,0), rowspan=2, colspan=2)
-            qcAx.imshow(qcFrame)
-            qcAx.axis('off')
-            plt.title('Main display: blinded cell idx = '+str(randLookup))
-            redAx = plt.subplot2grid((2,3), (0,2))
-            redAx.imshow(redInvFrame, cmap='gray')
-            redAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
-            redAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
-            redAx.xaxis.set_ticklabels([])
-            redAx.yaxis.set_ticklabels([])
-            redAx.grid()
-            plt.title(frameTitles[0])
-            grnAx = plt.subplot2grid((2,3), (1,2))
-            grnAx.imshow(greenInvFrame, cmap='gray')
-            grnAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
-            grnAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
-            grnAx.xaxis.set_ticklabels([])
-            grnAx.yaxis.set_ticklabels([])
-            grnAx.grid()
-            plt.title(frameTitles[1])
-            clear_output(wait=True)
-            plt.show()
+            frameDisplay(qcDict,frameTitles)
         with out2:
             out2.clear_output()
         with out2:
@@ -223,35 +173,8 @@ def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
         pastStatus = [status_list[pastloc] for 
                       pastloc in indexArray[max(0,randLookup-5):randLookup+1]]
         qcDict = makeQC_Art1mNG(randLookup,resultsData,df)
-        qcFrame = qcDict['qcFrame']
-        redInvFrame = qcDict['redInvFrame']
-        greenInvFrame = qcDict['greenInvFrame']
-        frameSize = len(redInvFrame)
         with out1:
-            fig = plt.figure(figsize=(12,8))
-            qcAx = plt.subplot2grid((2,3), (0,0), rowspan=2, colspan=2)
-            qcAx.imshow(qcFrame)
-            qcAx.axis('off')
-            plt.title('Main display: blinded cell idx = '+str(randLookup))
-            redAx = plt.subplot2grid((2,3), (0,2))
-            redAx.imshow(redInvFrame, cmap='gray')
-            redAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
-            redAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
-            redAx.xaxis.set_ticklabels([])
-            redAx.yaxis.set_ticklabels([])
-            redAx.grid()
-            plt.title(frameTitles[0])
-            grnAx = plt.subplot2grid((2,3), (1,2))
-            grnAx.imshow(greenInvFrame, cmap='gray')
-            grnAx.xaxis.set_ticks(np.linspace(0,frameSize,5))
-            grnAx.yaxis.set_ticks(np.linspace(0,frameSize,5))
-            grnAx.xaxis.set_ticklabels([])
-            grnAx.yaxis.set_ticklabels([])
-            grnAx.grid()
-            plt.title(frameTitles[1])
-            
-            clear_output(wait=True)
-            plt.show()
+            frameDisplay(qcDict,frameTitles)
         with out2:
             out2.clear_output()
         with out2:
