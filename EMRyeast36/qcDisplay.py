@@ -11,25 +11,29 @@ import random
 import EMRyeast36
 
 
-def initializeQC(resultsDataPath, randomSeed):
-    resultsData = pickle.load(resultsDataPath, 'rb') 
-    df = pd.DataFrame(list(resultsData['totalResults']))
+def initializeQC(resultsDataPath, expIDcategory, randomSeed):
+    resultsData = pickle.load(open(resultsDataPath, 'rb'))
+    if isinstance(resultsData['totalResults'], pd.DataFrame):
+        #already converted to dataframe. could do nothing, but continue to be safe
+        df = resultsData['totalResults']
+    else: df = pd.DataFrame(list(resultsData['totalResults']))
+    df = df[df['expID'].str.contains(expIDcategory)]
     randomIdx = list(range(len(df)))
     random.shuffle(randomIdx,random.seed(randomSeed))
     df = df.assign(randomIdx = randomIdx, qcStatus = 'unassigned')
     resultsData['totalResults'] = df
     pickle.dump(resultsData, open(resultsDataPath, 'wb'))
-    return df
+    return resultsData
     
 def syncQCstate(qcAutosavePath, resultsDataPath):
-    qcAutosave = pickle.load(qcAutosavePath, 'rb')
-    resultsData = pickle.load(resultsDataPath, 'rb') 
+    qcAutosave = pickle.load(open(qcAutosavePath, 'rb'))
+    resultsData = pickle.load(open(resultsDataPath, 'rb'))
     qcStatus = pd.Series(qcAutosave['statusList'], name='qcStatus')
     resultsData['totalResults']['qcStatus'] = qcStatus
     pickle.dump(resultsData, open(resultsDataPath, 'wb')) 
     
 def loadQCdataframe(resultsDataPath):
-    resultsData = pickle.load(resultsDataPath, 'rb')
+    resultsData = pickle.load(open(resultsDataPath, 'rb'))
     df = resultsData['totalResults']
     return df
     
@@ -157,9 +161,10 @@ def print_context(currentlocation, randLookup, statusList,
         print(pair)
 
 def saveQCstate(randLookup, statusList, resultsDirectory):
-    stateDict = {'randLookup':randLookup,
-                 'statusList':statusList}
-    pickle.dump(stateDict,open(resultsDirectory+'/qcAutosave.p','wb'))  
+    if randLookup%10 == 0:
+        stateDict = {'randLookup':randLookup,
+                     'statusList':statusList}
+        pickle.dump(stateDict,open(resultsDirectory+'/qcAutosave.p','wb'))  
         
 def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
                           frameTitles, resultsDirectory, autosave=True):
