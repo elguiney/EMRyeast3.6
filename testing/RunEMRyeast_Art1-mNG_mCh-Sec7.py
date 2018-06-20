@@ -58,12 +58,17 @@ nFields = folderData['nFields']
 imageNameList = folderData['imagenameList']
 pathList = folderData['pathlist']
 expIDlist = folderData['expIDlist']
-globalExtrema = EMRyeast36.batchIntensityScale(
+'''
+globalExtremaG = EMRyeast36.batchIntensityScale(
         folderData, channel=1, showProgress=True)
-globalMin = globalExtrema['globalmin']
-globalMax = globalExtrema['globalmax']
-
-for field in range(43,44):
+globalExtremaR = EMRyeast36.batchIntensityScale(
+        folderData, channel=0, showProgress=True)
+globalMinG = globalExtremaG['globalmin']
+globalMaxG = globalExtremaG['globalmax']
+globalMinR = globalExtremaR['globalmin']
+globalMaxR = globalExtremaR['globalmax']
+'''
+for field in range(0,1):
     print('starting image: ', imageNameList[field])
     # read image
     dvImage = EMRyeast36.basicDVreader(pathList[field], rolloff, nChannels,
@@ -117,15 +122,19 @@ for field in range(43,44):
     # measure
     results = EMRyeast36.measure_cells(primaryImage, masterCellLabel,
                                  refMclDict, imageName, expID, field,
-                                 globalMin, globalMax, showProgress)
+                                 globalMinG, globalMaxG, showProgress)
     # add measurements from each field to total results
     totalResults = np.concatenate((totalResults,results))
     # quality control prep
     print('preparing quality control information')
     greenFluor = dvImage[1,3,:,:].astype(float)
+    greenFluorScaled = ((greenFluor.astype('float')-globalMinG)
+                        /(globalMaxG-globalMinG))
     redFluor = np.amax(dvImage[0,:,:,:],axis=0).astype(float)
+    redFluorScaled = ((redFluor.astype('float')-globalMinR)
+                        /(globalMaxR-globalMinR))
     qcMclList = [ctxMinusGolgiCC,golgiCirclesMcl]
-    rgbQC = EMRyeast36.prep_rgbQCImage(greenFluor, redFluor,
+    rgbQC = EMRyeast36.prep_rgbQCImage(greenFluorScaled, redFluorScaled,
                                        qcMclList, rgbScalingFactors)
 
     # add qcStack to totalQC
