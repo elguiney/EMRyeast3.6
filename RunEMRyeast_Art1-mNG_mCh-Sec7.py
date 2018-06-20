@@ -13,10 +13,14 @@ import os
 import matplotlib.pyplot as plt
 import pandas as pd
 
+import ipywidgets as widgets
+from ipywidgets import Layout
+from IPython.display import display,clear_output
 
-targetFolder = r"C:\Users\elgui\Documents\Emr Lab Post Doc\microscopy\2018-06-12_Art1Quant_exp1"
+import random
 
 
+targetFolder = r"C:\Users\elgui\Documents\Emr Lab Post Doc\microscopy\Art1Quant"
 
 # local function parameters
 rolloff = 64
@@ -59,7 +63,7 @@ globalExtrema = EMRyeast36.batchIntensityScale(
 globalMin = globalExtrema['globalmin']
 globalMax = globalExtrema['globalmax']
 
-for field in range(nFields):
+for field in range(43,44):
     print('starting image: ', imageNameList[field])
     # read image
     dvImage = EMRyeast36.basicDVreader(pathList[field], rolloff, nChannels,
@@ -69,8 +73,8 @@ for field in range(nFields):
     # find cells from brightfield step 2
     nZslices = dvImage.shape[1]        
     for z in range(nZslices):
-        bwCellZstack[z,:,:] = EMRyeast36.correctBFanomaly(bwCellZstack[z,:,:],
-                                       bfAnomalyShiftVector)
+        bwCellZstack[z,:,:] = EMRyeast36.helpers.correctBFanomaly(
+            bwCellZstack[z,:,:], bfAnomalyShiftVector)
     # find cells from brightfield step 3
     rawMcl = EMRyeast36.cellsFromZstack(bwCellZstack, showProgress)[0]
     # find cells from brightfield step 4
@@ -130,7 +134,7 @@ for field in range(nFields):
     fieldsAnalyzed.append(field)
     # save masterCellLabel
     totalMcl.append(masterCellLabel)
-    # pool and save
+'''    # pool and save
     print('saving progress')
     
     pickle.dump({'totalResults':totalResults,
@@ -142,4 +146,4 @@ for field in range(nFields):
                        + str(datetime.datetime.now().date()) 
                        + '_analysis.p', 'wb'))
     print(imageNameList[field],' complete at ',datetime.datetime.now())
-    
+'''    
