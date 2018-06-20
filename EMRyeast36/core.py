@@ -645,7 +645,17 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
     for y, x, cellLbl in zip(mclCentroids[:,0],mclCentroids[:,1],uniqueLabels):
         centroid = (y,x)
         bufferLbl = labeledBuffer[centroid]
-        labeledBuffer[labeledBuffer == bufferLbl] = cellLbl
+        if bufferLbl != 0:
+            labeledBuffer[labeledBuffer == bufferLbl] = cellLbl
+        else: #try to contain the damage. Segmentation cleanup artifacts are a bitch
+            bufferLblList = labeledBuffer[np.where(unbufferedMcl==33)]
+            bufferLblList = bufferLblList[bufferLblList != 0]
+            (values,counts) = np.unique(bufferLblList,return_counts=True)
+            if values.size:
+                # only continue if the guess has at least one nonzero element
+                guessLbl = values[np.argmax(counts)]
+                # kill it. it is an abomination.
+                labeledBuffer[labeledBuffer == guessLbl] = 0
     labeledBuffer[unbufferedMcl != 0] = 0
     uniqueNewLabels = np.unique(labeledBuffer)
     diffLabels = np.setdiff1d(uniqueNewLabels,uniqueLabels)
