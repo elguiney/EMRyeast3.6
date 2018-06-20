@@ -1,7 +1,6 @@
 import sys
 import numpy as np
 import scipy.ndimage as ndimage
-from skimage.measure import regionprops
 from skimage import draw
 import matplotlib.pyplot as plt
 
@@ -88,51 +87,9 @@ def progressSpinner_text(index,processName,indexType):
     sys.stdout.write('\r')
     sys.stdout.write("%s:[%s] %d %s" % dispText)
     sys.stdout.flush()
-
-def make_qcFrame(rgbQC, greenFluor, redFluor, masterCellLabel,
-                 cellLbl, scalingFactors, borderSize):
-    mask = np.zeros(masterCellLabel.shape, dtype='uint8')
-    mask[np.abs(masterCellLabel) == cellLbl] = 1
-    cellProps = regionprops(mask)
-    nRows,nCols = masterCellLabel.shape
-    ymin,xmin,ymax,xmax = cellProps[0].bbox
-    height = ymax-ymin
-    width = xmax-xmin
-
-    squareSide = np.max([width,height]) + borderSize
-    centerY = int(ymax - height/2)
-    centerX = int(xmax - width/2)
-    ytop = int(min(max(squareSide / 2, centerY), nRows - squareSide / 2)
-               - squareSide/2)
-    xtop = int(min(max(squareSide / 2, centerX), nCols - squareSide / 2)
-               - squareSide/2)
-
-    greenFluor = greenFluor.astype('float')
-    redFluor = redFluor.astype('float')
-    grayscaleQC = np.max(rgbQC, axis=2)
-    grayQCz3 = np.concatenate(3*[grayscaleQC.reshape(nRows,nCols,1)],axis=2)
-    maskz3 = np.concatenate(3*[mask.reshape(nRows,nCols,1)],axis=2)
-    redScaled = ((redFluor-redFluor.min())
-                 / (scalingFactors[0]*(redFluor.max()-redFluor.min())))
-    redScaled[redScaled > 1] = 1
-    redInv = (255*(1 - redScaled)).astype('uint8')
-    greenScaled = ((greenFluor-greenFluor.min())
-                   / (scalingFactors[0]*(greenFluor.max()-greenFluor.min())))
-    greenScaled[greenScaled > 1] = 1
-    greenInv = (255*(1 - greenScaled)).astype('uint8')
-    flatMask = np.ndarray.flatten(maskz3)
-    flatDisplay = np.ndarray.flatten(grayQCz3).astype('uint8')
-    flatDisplay[flatMask==1] = np.ndarray.flatten(rgbQC)[flatMask==1]
-    display = flatDisplay.reshape((nRows,nCols,3))
-    qcFrame = display[ytop:ytop+squareSide,xtop:xtop+squareSide,:]
-    redInvFrame = redInv[ytop:ytop+squareSide,xtop:xtop+squareSide]
-    greenInvFrame = greenInv[ytop:ytop+squareSide,xtop:xtop+squareSide]
-    qcDict = {'qcFrame':qcFrame,
-              'redInvFrame':redInvFrame,
-              'greenInvFrame':greenInvFrame}
-    return qcDict
     
-def display_qcFrame(qcDict,frameTitles):
+def plt_qcFrame(qcDict,frameTitles):
+    ''' for displaying a qcFrame object with plt'''
     qcFrame = qcDict['qcFrame']
     redInvFrame = qcDict['redInvFrame']
     greenInvFrame = qcDict['greenInvFrame']
