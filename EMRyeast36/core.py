@@ -814,8 +814,7 @@ def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     for idx in range(2):
         fluor = [redFluor,greenFluor][idx]
         fluor = fluor.astype('float')
-        scaled = 255*((fluor-fluor.min())
-                  / (scalingFactors[idx]*(fluor.max()-fluor.min())))
+        scaled = 255*(fluor/scalingFactors[idx])
         scaled[scaled>255] = 255
         scaled = scaled.astype('uint8').reshape(ySize,xSize,1)
         rgbList[idx] = scaled
