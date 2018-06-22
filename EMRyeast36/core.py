@@ -545,9 +545,14 @@ def labelCortex_mcl(masterCellLabel, cortexWidth):
     Generate labeled mask of cell cortical region, using masterCellLabel (with
     numbered cells, buds as -1*[mother_label])
     '''
-    erosion = ndimage.binary_erosion(masterCellLabel,morph.disk(cortexWidth))
-    cortexMcl = (masterCellLabel
-                 - np.multiply(erosion.astype(int), masterCellLabel))
+    cortexMcl = np.copy(masterCellLabel)
+    nCells = np.max(masterCellLabel)
+    for cellIdx in range(nCells):
+        cellLbl = cellIdx + 1
+        erosion = np.zeros(masterCellLabel.shape, dtype='bool')
+        erosion[masterCellLabel == cellLbl] = 1
+        erosion = ndimage.binary_erosion(erosion, morph.disk(cortexWidth))
+        cortexMcl[erosion] = 0
     return cortexMcl
 
 def labelMaxproj(masterCellLabel, image, mkrChannel):
