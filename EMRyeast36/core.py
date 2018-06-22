@@ -583,13 +583,13 @@ def merge_labelMcl(labelMcl_one, labelMcl_two):
     return mergedMcl
 
 def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
-    '''
+    ''' 
     add a buffer to cells on the unbufferedMcl to compensate for minor errors
     in registration between brightfield derived outlines and fluorescence
     image. Intelligently split borders between closely touching cells so that
     nearby fluorescent signal is not misassigned.
     '''
-    #initialize workspaces
+    #%% initialize workspaces
     tablet = np.zeros(unbufferedMcl.shape, unbufferedMcl.dtype)
     mergeTab = np.zeros(unbufferedMcl.shape, unbufferedMcl.dtype)
     overlaps = np.zeros(unbufferedMcl.shape, unbufferedMcl.dtype)
@@ -614,7 +614,7 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
             unbufferedMcl, iterations=bufferSize)
     #divide overlapping regions with skeletonize
     overlapsSkeleton = morph.skeletonize(overlaps).astype('int')
-    #extend skeleton so it always completely divides cells
+    #%% extend skeleton so it always completely divides cells
     #first find edges of skeleton (points with only one 8-connected neighbor)
     kernel = [[1,1,1],
               [1,0,1],
@@ -642,7 +642,7 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
             dist = distBuffCells[point]
     bufferedCells[overlapsSkeleton == 1] = 0
     labeledBuffer, nLblBuffer = ndimage.label(bufferedCells)
-    #relabel to match mcl
+    #%% relabel to match mcl
     mclCentroids = np.array(
             ndimage.measurements.center_of_mass(
                     unbufferedMcl,unbufferedMcl,uniqueLabels),
@@ -733,7 +733,7 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
     indexing, provide startIdx to continue labeling cells sequentially across
     the entire experiment.
     '''
-
+    #%% setup
     results = []
     nCells = np.max(masterCellLabel)
     #unpack names
@@ -744,8 +744,9 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
     bkg = (sp.stats.mode(flatScaleduint8).mode.astype('float'))/255
     fluorBkgCorr = 1000*(fluorScaled-bkg)
     refNames = [key for key in refMclDict]
-    #measurment loop
+    #%% measurment loop
     for cellidx in range(nCells):
+        #%% loop setup
         cellLbl = cellidx + 1
         # write image specific identifiers
         measurements = {'imageName':imageName,
@@ -758,16 +759,16 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
         totalIntDen = (fluorBkgCorr[np.abs(masterCellLabel) == cellLbl]).sum()
         totalArea = (np.abs(masterCellLabel) == cellLbl).sum()
         totalBrightness = totalIntDen / totalArea
-        # measure fluorescence at bud, if present
-        if -cellLbl in masterCellLabel:
+        #%% measure fluorescence at bud, if present
+        if -cellLbl in masterCellLabel: # a bud was coded in the mcl
             budFound = True
             budIntDen = (fluorBkgCorr[masterCellLabel == -cellLbl]).sum()
             budArea = (masterCellLabel == -cellLbl).sum()
             budBrightness = budIntDen / budArea
-        else:
+        else: #there isn't a bud for this cell
             budFound = False
             budIntDen = budArea = budBrightness = np.nan
-        # measure fluorescen at masks
+        #%% measure fluorescence at masks
         for refKey in refNames:
             refMcl = refMclDict[refKey]
             refIntDen = (fluorBkgCorr[np.abs(refMcl) == cellLbl]).sum()
@@ -807,6 +808,8 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
 
 #prepare qc image
 def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
+    '''prepare qc image'''
+    #%%
     rgbList=[0,0,0]
     ySize,xSize = greenFluor.shape
     mask_one = qcMclList[0].astype('bool')
