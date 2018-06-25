@@ -776,7 +776,7 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
         else: #there isn't a bud for this cell
             budFound = False
             budIntDen = budArea = budBrightness = np.nan
-            budrefHist = motherHist = np.nan
+            budHist = budrefHist = motherHist = np.nan
         #%% measure fluorescence at masks
         for refKey in refNames:
             refMcl = refMclDict[refKey]
@@ -859,3 +859,5 @@ def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     rgbList[1][mask_two_edge.reshape(ySize,xSize,1)]=255
     rgbQC = np.concatenate(rgbList, axis=2)
     return(rgbQC)
+    
+
