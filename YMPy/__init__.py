@@ -1,10 +1,10 @@
 '''
-EMRyeast36
+YMPy (YeastMorphologyPypeline)
 
 Edge detection based cell identification with yeast specific heuristics.
 Measurement, display, and quality control functions.
 Runs in python 3.6
 '''
-from EMRyeast36.core import *
-import EMRyeast36.helpers
-import EMRyeast36.qcDisplay
+from YMPy.core import *
+import YMPy.helpers
+import YMPy.qcDisplay

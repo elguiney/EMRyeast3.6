@@ -8,7 +8,7 @@ import pickle
 import pandas as pd
 import random
 
-import EMRyeast36
+import YMPy
 
 
 def initializeQC(resultsDataPath, expIDcategory, randomSeed):
@@ -24,19 +24,19 @@ def initializeQC(resultsDataPath, expIDcategory, randomSeed):
     resultsData['totalResults'] = df
     pickle.dump(resultsData, open(resultsDataPath, 'wb'))
     return resultsData
-    
+
 def syncQCstate(qcAutosavePath, resultsDataPath):
     qcAutosave = pickle.load(open(qcAutosavePath, 'rb'))
     resultsData = pickle.load(open(resultsDataPath, 'rb'))
     qcStatus = pd.Series(qcAutosave['statusList'], name='qcStatus')
     resultsData['totalResults']['qcStatus'] = qcStatus
-    pickle.dump(resultsData, open(resultsDataPath, 'wb')) 
-    
+    pickle.dump(resultsData, open(resultsDataPath, 'wb'))
+
 def loadQCdataframe(resultsDataPath):
     resultsData = pickle.load(open(resultsDataPath, 'rb'))
     df = resultsData['totalResults']
     return df
-    
+
 def makeQCbuttons():
     b1 = widgets.Button(
         description=' accept',
@@ -69,7 +69,7 @@ def makeQCframe(randLookup, resultsData, df, pathList,
     cellLbl = int(df.loc[df['randomIdx'] == randLookup,'localLbl'])
     rgbQC = resultsData['totalQC'][fieldIdx]
     masterCellLabel = resultsData['totalMcl'][fieldIdx]
-    dvImage = EMRyeast36.basicDVreader(pathList[fieldIdx],rolloff=64)
+    dvImage = YMPy.basicDVreader(pathList[fieldIdx],rolloff=64)
     greenFluor = dvImage[1,3,:,:].astype(float)
     redFluor = np.amax(dvImage[0,:,:,:],axis=0).astype(float)
     mask = np.zeros(masterCellLabel.shape, dtype='uint8')
@@ -112,7 +112,7 @@ def makeQCframe(randLookup, resultsData, df, pathList,
               'redInvFrame':redInvFrame,
               'greenInvFrame':greenInvFrame}
     return(qcDict)
-    
+
 def frameDisplay(qcDict,frameTitles):
     '''display a qcFrame object, for use with an output widget'''
     qcFrame = qcDict['qcFrame']
@@ -142,13 +142,13 @@ def frameDisplay(qcDict,frameTitles):
     plt.title(frameTitles[1])
     clear_output(wait=True)
     plt.show()
-    
+
 def get_context(randLookup, indexArray, statusList):
     pastRandIdces = list(range(max(0,randLookup-5),randLookup+1))
-    pastStatus = [statusList[pastloc] for 
+    pastStatus = [statusList[pastloc] for
                   pastloc in indexArray[max(0,randLookup-5):randLookup+1]]
     return(pastRandIdces, pastStatus)
-    
+
 def print_context(currentlocation, randLookup, statusList,
                   pastRandIdces, pastStatus, autosave):
     print('current cell (blind Idx):',
@@ -164,8 +164,8 @@ def saveQCstate(randLookup, statusList, resultsDirectory):
     if randLookup%10 == 0:
         stateDict = {'randLookup':randLookup,
                      'statusList':statusList}
-        pickle.dump(stateDict,open(resultsDirectory+'/qcAutosave.p','wb'))  
-        
+        pickle.dump(stateDict,open(resultsDirectory+'/qcAutosave.p','wb'))
+
 def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
                           frameTitles, resultsDirectory, autosave=True):
     '''
@@ -173,9 +173,9 @@ def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
     each funtion updates the qc statusList based on the button press
     (b1 = accept and advance, b2 = reject and advance,
      b3 = go back, b4 = advance)
-    
+
     '''
-    
+
     global randLookup
     global total
     total = len(df)
@@ -185,7 +185,7 @@ def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
     statusList = list(df['qcStatus'])
     out1,out2 = makeQCoutputs()
 
-           
+
     def click_b1(b):
         global randLookup
         location = indexArray[randLookup]
@@ -210,7 +210,7 @@ def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
                 print_context(currentlocation, randLookup, statusList,
                               pastRandIdces, pastStatus, autosave)
             return(statusList)
-                
+
     def click_b2(b):
         global randLookup
         location = indexArray[randLookup]
@@ -235,7 +235,7 @@ def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
                 print_context(currentlocation, randLookup, statusList,
                               pastRandIdces, pastStatus, autosave)
             return(statusList)
-        
+
     def click_b3(b):
         global randLookup
         randLookup -= 1
@@ -265,5 +265,5 @@ def makeQC_clickfunctions(randLookupStart, resultsData, df, pathList,
         with out2:
             print_context(
                         currentlocation, randLookup, pastRandIdces, pastStatus)
-             
+
     return(click_b1, click_b2, click_b3, click_b4, out1, out2, statusList)

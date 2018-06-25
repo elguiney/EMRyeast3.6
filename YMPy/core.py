@@ -1,5 +1,5 @@
 """
-EMRyeast36_v0.1
+YMPy core functions
 
 Emr lab image analysis module
 adapted for python 3.6
@@ -23,7 +23,7 @@ from skimage.filters import threshold_otsu
 import skimage.morphology as morph
 
 
-from EMRyeast36.helpers import progressBar_text, progressSpinner_text
+from YMPy.helpers import progressBar_text, progressSpinner_text
 
 
 def batchParse(targetFolder, expIDloc, imageExtension='R3D_D3D.dv'):
@@ -209,7 +209,7 @@ def makeCellzStack(dvImage, bwChannel=2, showProgress=True):
 
 def cellsFromZstack(bwCellZstack, showProgress=True):
     '''find the best, non duplicate, non overlapping cell outlines from a
-    z-stack of binary cell objects, eg as found with EMRyeast.bfFlipFlop'''
+    z-stack of binary cell objects, eg as found with YMPy.core.fillLogZeros'''
     nZstacks = bwCellZstack.shape[0]
     stackData = {'nObj': np.zeros(nZstacks,dtype='int16'),
                  'bwLabel': [], 'props': []}
@@ -369,11 +369,11 @@ def bfCellMorphCleanup(mcl, showProgress,
                        closeRadius=3, minBudSize = 75):
     '''
     process mcl, a labeled master cell list np-array from
-    EMRyeast.cellsFromZstack().
+    YMPy.core.cellsFromZstack().
     measures morphology and identifies buds, cleans up cell outlines
     (1) Cleans up mcl with a binary closing to remove edge-holes, using
         closeRadius to create a disk structuring element
-    (2) Uses EMRyeast.edgeLabel() and EMRyeast.angleFinder() to identify
+    (2) Uses YMPy.core.edgeLabel() and YMPy.core.angleFinder() to identify
     regions of negative curvature
         - regions of negative curvature are checked for the following
         a) minimum length (default minLength = 5 pixels)
@@ -583,7 +583,7 @@ def merge_labelMcl(labelMcl_one, labelMcl_two):
     return mergedMcl
 
 def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
-    ''' 
+    '''
     add a buffer to cells on the unbufferedMcl to compensate for minor errors
     in registration between brightfield derived outlines and fluorescence
     image. Intelligently split borders between closely touching cells so that
@@ -670,6 +670,7 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
     return labeledBuffer
 
 def centroidCirclesMcl(mask, masterCellLabel, radius, iterations=1):
+    #%% make centroid circles
     maskLabels, nlbl = ndimage.label(mask)
     maskProps = regionprops(maskLabels)
     newMask = np.zeros(mask.shape, dtype='bool')
@@ -691,6 +692,7 @@ def centroidCirclesMcl(mask, masterCellLabel, radius, iterations=1):
         rr = np.delete(rr,oobPixels)
         cc = np.delete(cc,oobPixels)
         newMask[rr,cc] = 1
+    #%% iterate if needed
     if iterations > 1:
         for i in range(iterations-1):
             residual = np.copy(mask)
@@ -701,7 +703,6 @@ def centroidCirclesMcl(mask, masterCellLabel, radius, iterations=1):
             newMask[residualMask] = 1
     newMcl[newMask] = masterCellLabel[newMask]
     return newMcl
-
 
 def measure_cells(primaryImage, masterCellLabel, refMclDict,
                   imageName, expID, fieldIdx,
@@ -723,6 +724,8 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
     respectively. refMcl's should have the same numbering scheme as the
     masterCellLabel. refMclDict is a standard dictionary with the names of each
     refMcl to be used.
+    The first refMcl present in the list will be considered the baseline mcl;
+
 
     Images are rescaled to experiment wide min,max values; background is
     the modal fluorescence intensity after binning into 256 bins between global
@@ -832,4 +835,3 @@ def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     rgbList[1][mask_two_edge.reshape(ySize,xSize,1)]=255
     rgbQC = np.concatenate(rgbList, axis=2)
     return(rgbQC)
-
