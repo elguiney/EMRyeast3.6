@@ -1,9 +1,11 @@
 # YMPy
 YMPY is a
 
-__Y__east ![alt text](https://github.com/elguiney/YMPy/blob/master/YMPy-logo.png "Yeast Morphology Pypeline")
-__M__orphology
-__Py__peline
+**Y**east                                  ![alt text](https://github.com/elguiney/YMPy/blob/master/YMPy-logo.png "Yeast Morphology Pypeline")
+
+**M**orphology
+
+**Py**peline
 
 
 Image processing pipeline for quantitative analysis of yeast (_Saccharomyces cerevisiae_) microscopy.
