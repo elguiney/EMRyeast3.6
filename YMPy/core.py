@@ -776,6 +776,7 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
         else: #there isn't a bud for this cell
             budFound = False
             budIntDen = budArea = budBrightness = np.nan
+            budrefHist = motherHist = np.nan
         #%% measure fluorescence at masks
         for refKey in refNames:
             refMcl = refMclDict[refKey]
