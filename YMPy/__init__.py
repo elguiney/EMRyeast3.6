@@ -8,3 +8,4 @@ Runs in python 3.6
 from YMPy.core import *
 import YMPy.helpers
 import YMPy.qcDisplay
+import YMPy.pipelines
