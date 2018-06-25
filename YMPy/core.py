@@ -550,7 +550,7 @@ def labelCortex_mcl(masterCellLabel, cortexWidth):
     for cellIdx in range(nCells):
         cellLbl = cellIdx + 1
         erosion = np.zeros(masterCellLabel.shape, dtype='bool')
-        erosion[masterCellLabel == cellLbl] = 1
+        erosion[np.abs(masterCellLabel) == cellLbl] = 1
         erosion = ndimage.binary_erosion(erosion, morph.disk(cortexWidth))
         cortexMcl[erosion] = 0
     return cortexMcl
@@ -666,7 +666,7 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
     diffLabels = np.setdiff1d(uniqueNewLabels,uniqueLabels)
     for diff in diffLabels:
         labeledBuffer[labeledBuffer==diff]=0
-    if showProgress: print('finsished')
+    if showProgress: print('finsishing')
     return labeledBuffer
 
 def centroidCirclesMcl(mask, masterCellLabel, radius, iterations=1):
@@ -706,7 +706,7 @@ def centroidCirclesMcl(mask, masterCellLabel, radius, iterations=1):
 
 def measure_cells(primaryImage, masterCellLabel, refMclDict,
                   imageName, expID, fieldIdx,
-                  globalMin, globalMax, showProgress):
+                  globalMin, globalMax, nHistBins, showProgress):
     '''
     measurement function
     measures fluorescence intensity in the primaryImage for each cell in the
@@ -745,8 +745,9 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
     fluorScaled = (fluorImage.astype('float')-globalMin)/(globalMax-globalMin)
     flatScaleduint8 = np.ndarray.flatten((fluorScaled*255).astype('uint8'))
     bkg = (sp.stats.mode(flatScaleduint8).mode.astype('float'))/255
-    fluorBkgCorr = 1000*(fluorScaled-bkg)
+    fluorBkgCorr = nHistBins*(fluorScaled-bkg)
     refNames = [key for key in refMclDict]
+    histBins = np.arange(nHistBins+1)
     #%% measurment loop
     for cellidx in range(nCells):
         #%% loop setup
@@ -756,32 +757,45 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
                         'expID':expID,
                         'localLbl':cellLbl,
                         'fieldIdx':fieldIdx,
-                        'qcStatus':'unreviewed',
-                        'qcTimestamp':[]}
+                        'qcStatus':'unreviewed'}
         # define basic cell wide measurements
-        totalIntDen = (fluorBkgCorr[np.abs(masterCellLabel) == cellLbl]).sum()
-        totalArea = (np.abs(masterCellLabel) == cellLbl).sum()
+        totalMask = (np.abs(masterCellLabel) == cellLbl)
+        totalIntDen = (fluorBkgCorr[totalMask]).sum()
+        totalArea = totalMask.sum()
         totalBrightness = totalIntDen / totalArea
+        totalHist = np.histogram(fluorBkgCorr[totalMask], bins=histBins)[0]
         #%% measure fluorescence at bud, if present
         if -cellLbl in masterCellLabel: # a bud was coded in the mcl
             budFound = True
-            budIntDen = (fluorBkgCorr[masterCellLabel == -cellLbl]).sum()
-            budArea = (masterCellLabel == -cellLbl).sum()
+            totalMaskBud = (masterCellLabel == -cellLbl)
+            budIntDen = (fluorBkgCorr[totalMaskBud]).sum()
+            budArea = totalMaskBud.sum()
             budBrightness = budIntDen / budArea
+            budHist = np.histogram(
+                    fluorBkgCorr[totalMaskBud], bins=histBins)[0]
         else: #there isn't a bud for this cell
             budFound = False
             budIntDen = budArea = budBrightness = np.nan
         #%% measure fluorescence at masks
         for refKey in refNames:
             refMcl = refMclDict[refKey]
-            refIntDen = (fluorBkgCorr[np.abs(refMcl) == cellLbl]).sum()
-            refArea = np.sum(np.abs(refMcl) == cellLbl)
+            refMask = (np.abs(refMcl) == cellLbl)
+            refIntDen = (fluorBkgCorr[refMask]).sum()
+            refHist = np.histogram(fluorBkgCorr[refMask], bins=histBins)[0]
+            refArea = np.sum(refMask)
             if refArea != 0:
                 refBrightness = refIntDen / refArea
             else:
                 refBrightness = 0
             if budFound:
-                budrefIntDen = (fluorBkgCorr[refMcl == cellLbl]).sum()
+                budrefMask = (refMcl == -cellLbl)
+                budrefIntDen = (fluorBkgCorr[budrefMask]).sum()
+                budrefHist = np.histogram(
+                        fluorBkgCorr[budrefMask],
+                        bins=histBins)[0]
+                motherHist = np.histogram(
+                        fluorBkgCorr[refMcl == cellLbl],
+                        bins=histBins)[0]
                 budrefArea = (refMcl == -cellLbl).sum()
                 if budrefArea != 0:
                     budrefBrightness = budrefIntDen / budrefArea
@@ -793,19 +807,28 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
             measurements[refKey + '_area'] = refArea
             measurements[fluorName + '_brightness_at_' + refKey] = (
                     refBrightness)
+            measurements[fluorName + '_histogram_at_' + refKey] = (
+                    refHist)
             measurements['bud_' + fluorName + '_intDensity_at_' + refKey] = (
                     budrefIntDen)
             measurements['bud_' + refKey + '_area'] = budrefArea
             measurements['bud_' + fluorName + '_brightness_at_' + refKey] = (
                     budrefBrightness)
-            measurements['total_' + fluorName + '_intDensity'] = totalIntDen
+            measurements['bud_' + fluorName + '_histogram_at_' + refKey] = (
+                    budrefHist)
+            measurements['mother_' + fluorName + '_histogram_at_' + refKey] = (
+                    motherHist)
+        measurements['total_' + fluorName + '_intDensity'] = totalIntDen
         measurements['total_cell_area'] = totalArea
         measurements['total_' + fluorName + '_brightness'] = totalBrightness
+        measurements['total_' + fluorName + '_histogram'] = totalHist
         measurements['bud_' + fluorName + '_intDensity'] = budIntDen
         measurements['bud_area'] = budArea
         measurements['bud_' + fluorName + '_brightness'] = budBrightness
+        measurements['bud_' + fluorName + '_histogram'] = budHist
         results.append(measurements)
         if showProgress: progressBar_text(cellLbl,nCells,'measuring')
+        #%% finish up
     if showProgress: print()
     return results
 
