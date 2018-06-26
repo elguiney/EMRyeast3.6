@@ -831,12 +831,11 @@ def measure_cells(primaryImage, masterCellLabel, refMclDict,
         if showProgress: progressBar_text(cellLbl,nCells,'measuring')
         #%% finish up
     if showProgress: print()
-    return results
+    return(results)
 
-#prepare qc image
+#%% prepare qc image
 def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     '''prepare qc image'''
-    #%%
     rgbList=[0,0,0]
     ySize,xSize = greenFluor.shape
     mask_one = qcMclList[0].astype('bool')
@@ -859,5 +858,79 @@ def prep_rgbQCImage(greenFluor, redFluor, qcMclList, scalingFactors):
     rgbList[1][mask_two_edge.reshape(ySize,xSize,1)]=255
     rgbQC = np.concatenate(rgbList, axis=2)
     return(rgbQC)
+ 
+#%% histogram measurement functions
     
+def histSubCorrection(dataHist, correctionHist):
+    #scale correctionHist
+    scaledCHist = np.sum(dataHist)*correctionHist/np.sum(correctionHist)
+    resultHist = dataHist - scaledCHist
+    resultHist[resultHist < 0] = 0
+    resultHist[0:np.argmax(correctionHist)] = 0
+    return(resultHist)
 
+def histAddCorrection(dataHist, correctionHist):
+    #scale correctionHist
+    scaledCHist = np.sum(dataHist)*correctionHist/np.sum(correctionHist)
+    inverseHist = dataHist - scaledCHist
+    inverseHist[inverseHist < 0] = 0
+    inverseHist[np.argmax(correctionHist)::] = 0
+    resultHist = dataHist - inverseHist
+    return(resultHist)
+        
+def cortex_marker_histScore(resultsDict, parameterDict):
+    #extract and smooth histograms
+    p = parameterDict
+    cortexKey = (p['measuredProteinName'] + '_histogram_at_cortex(non-'
+                 + p['markerName'] + ')')
+    markerKey = (p['measuredProteinName'] + '_histogram_at_' +p['markerName'] 
+                 + '(circles)')
+    bkgKey = p['measuredProteinName'] + '_histogram_at_cytoplasm'
+    smoothingKernelWidth = p['smoothingKernelWidth']
+    smoothingKernel = np.ones(smoothingKernelWidth)/smoothingKernelWidth
+    totalKey = 'total_' + p['measuredProteinName'] + '_histogram'
+    cortexHist = np.convolve(
+            resultsDict[cortexKey], smoothingKernel, mode='same')
+    markerHist = np.convolve(
+            resultsDict[markerKey], smoothingKernel, mode='same')
+    bkgrndHist = np.convolve(
+            resultsDict[bkgKey], smoothingKernel, mode='same')   
+    total_Hist = np.convolve(
+            resultsDict[totalKey], smoothingKernel, mode='same')
+    #check for cells with no bkgHist defined, pass nan
+    if np.sum(bkgrndHist) == 0:
+        (cortexHSum, markerHSum, total_HSum, 
+         cortexHArea, markerHArea, total_HArea) = 6*(np.nan,)
+    else:
+        #cacluate
+        cortexSubHist = histSubCorrection(cortexHist, bkgrndHist)
+        markerSubHist = histSubCorrection(markerHist, bkgrndHist)
+        total_AddHist = histAddCorrection(total_Hist, bkgrndHist)
+        cortexHSum = np.sum((np.arange(p['nHistBins'])+1)*cortexSubHist)
+        markerHSum = np.sum((np.arange(p['nHistBins'])+1)*markerSubHist)
+        total_HSum = np.sum((np.arange(p['nHistBins'])+1)*total_AddHist)
+        cortexHArea = np.sum(cortexSubHist)
+        markerHArea = np.sum(markerSubHist)
+        total_HArea = np.sum(total_AddHist)
+             
+    #put in dictionary
+    hScores = {
+            ('cortex(non-' + p['markerName'] + ')_' + p['measuredProteinName']
+                + '_HSum'):cortexHSum,
+            ('cortex(non-' + p['markerName'] + ')_' + p['measuredProteinName']
+                + '_HArea'):cortexHArea,
+            ('cortex(non-' + p['markerName'] + ')_' + p['measuredProteinName']
+                + '_HBrightness'):cortexHSum/total_HArea,
+            (p['markerName'] + '(circles)_' + p['measuredProteinName'] 
+                + '_HSum'):markerHSum,
+            (p['markerName'] + '(circles)_' + p['measuredProteinName'] 
+                + '_HArea'):markerHArea,
+            (p['markerName'] + '(circles)_' + p['measuredProteinName']
+                + '_HBrightness'):markerHSum/total_HArea,
+            'total_cell_' + p['measuredProteinName'] + '_HSum':total_HSum,
+            'total_cell_' + p['measuredProteinName'] + '_HArea':total_HArea
+            }
+    return(hScores)
+    
+    
+    
