@@ -30,7 +30,7 @@ For use with DeltaVision microscopes and the .dv file format, requires
 
 #### Features:
 - Takes advantage of bright-field microscopy to find accurate cell outlines without requiring a fluorescent marker
-- Edges detection via laplace of gaussian transformation, followed by heuristic based morphology cleanup yielding high quality cell outlines suitable for precise protein localization and cell morphology measuremnts
+- Edge detection via laplace of gaussian transformation, followed by heuristic based morphology cleanup yielding high quality cell outlines suitable for precise protein localization and cell morphology measuremnts
 - integrates a blinded quality control step to ensure all cells used for further analysis are segmented and measured at publication quality
 - Built from modular core functions, combined into simple pipelines to process a folder of images in a single batch
 - All code in a pipeline is run from a single Jupyter notebook, ensuring complete documentation and reproducibility for publication grade analyses.
