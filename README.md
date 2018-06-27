@@ -1,8 +1,8 @@
-# YMPy
+# **YMPy**
 
 
  ![alt text](https://github.com/elguiney/YMPy/blob/master/YMPy-logo.png "Yeast Morphology Pypeline")
- ## **YMPY** is a  **Y**east **M**orphology **Py**peline
+ ## **YMPy** is a  **Y**east **M**orphology **Py**peline
 
 
 
