@@ -3,7 +3,7 @@ Script that emulates measure_GFP_wRFPmarker
 use for testing
 '''
 
-import YMPy
+import ympy
 import pickle
 import numpy as np
 import datetime
@@ -52,9 +52,12 @@ parameterDict = dict(
         rgbScalingFactors = [0.05,0.1], #semi empirically determend factors
             #to make qc images at a reasonable brightness and contrast
         gryScalingFactors = [0.2,0.2], #same
-        measureFields = [0,1] #either 'all', to measure entire folder, or
+        measureFields = [10,11], #either 'all', to measure entire folder, or
             #a slice. [5,10] would measure fields 5,6,7,8 and 9 as they
-            #appear in folderData['pathList'] from YMPy.batchParse()
+            #appear in folderData['pathList'] from ympy.batchParse()
+        smoothingKernelWidth = 5 #smoothing kernel for histogram calibrated
+            #foci-brightness and foci-area measurments
+        
         )
 
 #%% start measurment
@@ -74,16 +77,16 @@ resultsDirectory = folderPath + '/results/'
 if not os.path.exists(resultsDirectory):
     os.makedirs(resultsDirectory)
 
-folderData = YMPy.batchParse(
+folderData = ympy.batchParse(
         folderPath, p['expIDloc'], p['imageExtension'])
 nFields = folderData['nFields']
 imageNameList = folderData['imagenameList']
 pathList = folderData['pathlist']
 expIDlist = folderData['expIDlist']
 #%% measure global values (slow for big datasets)
-globalExtremaG = YMPy.batchIntensityScale(
+globalExtremaG = ympy.batchIntensityScale(
         folderData, p['greenChannel'], p['showProgress'])
-globalExtremaR = YMPy.batchIntensityScale(
+globalExtremaR = ympy.batchIntensityScale(
         folderData, p['redChannel'], p['showProgress'])
 globalMinG = globalExtremaG['globalmin']
 globalMaxG = globalExtremaG['globalmax']
@@ -98,50 +101,50 @@ else:
     stop = p['measureFields'][1]
 for field in range(start,stop):
     # read image
-    dvImage = YMPy.basicDVreader(
+    dvImage = ympy.basicDVreader(
             pathList[field], p['rolloff'], p['nChannels'], p['zFirst'])
     #%% find cells and cleanup morphology
     # find cells from brightfield step 1
-    bwCellZstack = YMPy.makeCellzStack(
+    bwCellZstack = ympy.makeCellzStack(
             dvImage, p['bwChannel'], p['showProgress'])
     # find cells from brightfield step 2
     nZslices = dvImage.shape[1]
     for z in range(nZslices):
-        bwCellZstack[z,:,:] = YMPy.helpers.correctBFanomaly(
+        bwCellZstack[z,:,:] = ympy.helpers.correctBFanomaly(
             bwCellZstack[z,:,:], p['bfAnomalyShiftVector'])
     # find cells from brightfield step 3
-    rawMcl = YMPy.cellsFromZstack(bwCellZstack, p['showProgress'])[0]
+    rawMcl = ympy.cellsFromZstack(bwCellZstack, p['showProgress'])[0]
     # find cells from brightfield step 4
-    unbufferedMcl = YMPy.bfCellMorphCleanup(
+    unbufferedMcl = ympy.bfCellMorphCleanup(
             rawMcl, p['showProgress'], p['minAngle'], 
             p['minLength'], p['closeRadius'], p['minBudSize'])
     #%% define measurment masks
     # unbufferedMcl is the best guess at the 'true outside edge' of the 
     # cells; use it as the starting point to find a 10pixel thick cortex
-    unbufferedCortexMcl = YMPy.labelCortex_mcl(
+    unbufferedCortexMcl = ympy.labelCortex_mcl(
             unbufferedMcl, p['cortexWidth'])
     # because the bright field and fluorescence are not perfectly aligned,
     # and to handle inaccuracies in edge finding, also buffer out from the
     # outside edge
-    buffer = YMPy.buffer_mcl(
+    buffer = ympy.buffer_mcl(
             unbufferedMcl, p['bufferSize'], p['showProgress'])
     # merge this buffer onto the unbufferedMcl and the cortexMcl
-    masterCellLabel = YMPy.merge_labelMcl(unbufferedMcl, buffer)
-    cortexMcl = YMPy.merge_labelMcl(unbufferedCortexMcl, buffer)
+    masterCellLabel = ympy.merge_labelMcl(unbufferedMcl, buffer)
+    cortexMcl = ympy.merge_labelMcl(unbufferedCortexMcl, buffer)
     
     # use Otsu thresholding on the max projection of RFPmarker
-    markerMclOtsu = YMPy.labelMaxproj(
+    markerMclOtsu = ympy.labelMaxproj(
             masterCellLabel, dvImage, p['mkrChannel'])
     # then use centroidCircles to uniformly mask peri-golgi regions
-    markerCirclesMcl = YMPy.centroidCirclesMcl(
+    markerCirclesMcl = ympy.centroidCirclesMcl(
             markerMclOtsu.astype('bool'), masterCellLabel,
             p['markerRadius'], p['markerCircleIterations'])
     # subtract so that marker localization has precedence over cortical
     # localization
-    cortexMinusMarker = YMPy.subtract_labelMcl(cortexMcl, markerCirclesMcl)
+    cortexMinusMarker = ympy.subtract_labelMcl(cortexMcl, markerCirclesMcl)
     # finally, compute mask for remaining cytoplasmic regions
-    cytoplasmMcl =YMPy.subtract_labelMcl(masterCellLabel,
-            YMPy.merge_labelMcl(markerCirclesMcl, cortexMinusMarker))
+    cytoplasmMcl =ympy.subtract_labelMcl(masterCellLabel,
+            ympy.merge_labelMcl(markerCirclesMcl, cortexMinusMarker))
     #%% measure
     # measure Art1-mNG in the middle z-slice
     primaryImage = {p['measuredProteinName']:
@@ -156,7 +159,7 @@ for field in range(start,stop):
     expID = expIDlist[field]
     imageName = imageNameList[field]
     # measurement function
-    results = YMPy.measure_cells(
+    results = ympy.measure_cells(
             primaryImage, masterCellLabel, refMclDict,
             imageName, expID, field,
             globalMinG, globalMaxG, p['nHistBins'], p['showProgress'])
@@ -172,7 +175,7 @@ for field in range(start,stop):
     redFluorScaled = ((redFluor.astype('float')-globalMinR)
                       /(globalMaxR-globalMinR))
     qcMclList = [cortexMinusMarker, markerCirclesMcl]
-    rgbQC = YMPy.prep_rgbQCImage(
+    rgbQC = ympy.prep_rgbQCImage(
             greenFluorScaled, redFluorScaled,
             qcMclList, p['rgbScalingFactors'])
     
