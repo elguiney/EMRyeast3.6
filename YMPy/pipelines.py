@@ -1,5 +1,5 @@
 ''' 
-ympy bespoke measurement functions.
+ympy bespoke measurement pipelines.
 Follow the examples here to create your own
 '''
 
@@ -49,7 +49,169 @@ GFP_wRFPmarker_params = dict(
             #return results as a variable in addition to saving them
             #(it always saves)
         )
+
+class GFPwMarkerPipeline():
+    def __init__(self, **kwargs):
+        # defaults
+        self.p = GFP_wRFPmarker_params
+        self.p.update(kwargs)
+        for k,v in self.p.items():
+            setattr(self, k, v)
+    def help(self):
+        print(' ympy pipeline object\n',
+              'usage:\n',
+              'reference and set parameters as class attributes.\n',
+              'initialize(folderPath) to prepare a folder for analysis\n',
+              'runPipeline() to proccess all files in targetFolder')
+    def initialize(self, folderPath):
+        # run batchParse to initiailze on folder
+        self.folderPath = folderPath
+        self.folderData = ympy.batchParse(
+                folderPath, self.expIDloc, self.imageExtension)
+        self.imageNameList = self.folderData['imagenameList']
+        self.pathList = self.folderData['pathlist']
+        self.nFields = self.folderData['nFields']
+        self.expIDlist = self.folderData['expIDlist']
+    def runPipeline(self):
+        print('beginning analysis of \n', self.folderPath,'\n at ',
+          datetime.datetime.now())
+        # initialize experiment variables
+        totalResults = []
+        totalQC = []
+        fieldsAnalyzed = []
+        totalMcl = []
+            
+        resultsDirectory = self.folderPath + '/results/'
+        if not os.path.exists(resultsDirectory):
+            os.makedirs(resultsDirectory)
         
+        #%% measure global values (slow for big datasets)
+        globalExtremaG = ympy.batchIntensityScale(
+                self.folderData, self.greenChannel, self.showProgress)
+        globalExtremaR = ympy.batchIntensityScale(
+                self.folderData, self.redChannel, self.showProgress)
+        globalMinG = globalExtremaG['globalmin']
+        globalMaxG = globalExtremaG['globalmax']
+        globalMinR = globalExtremaR['globalmin']
+        globalMaxR = globalExtremaR['globalmax']
+        #%% main loop
+        if self.measureFields == 'all':
+            start = 0
+            stop = self.nFields
+        else:
+            start = self.measureFields[0]
+            stop = self.measureFields[1]
+        for field in range(start,stop):
+            # read image
+            dvImage = ympy.basicDVreader(
+                    self.pathList[field],
+                    self.rolloff,
+                    self.nChannels,
+                    self.zFirst)
+            #%% find cells and cleanup morphology
+            # find cells from brightfield step 1
+            bwCellZstack = ympy.makeCellzStack(
+                    dvImage, self.bwChannel, self.showProgress)
+            # find cells from brightfield step 2
+            nZslices = dvImage.shape[1]
+            for z in range(nZslices):
+                bwCellZstack[z,:,:] = ympy.helpers.correctBFanomaly(
+                    bwCellZstack[z,:,:], self.bfAnomalyShiftVector)
+            # find cells from brightfield step 3
+            rawMcl = ympy.cellsFromZstack(bwCellZstack, self.showProgress)[0]
+            # find cells from brightfield step 4
+            unbufferedMcl = ympy.bfCellMorphCleanup(
+                    rawMcl, self.showProgress, self.minAngle, 
+                    self.minLength, self.closeRadius, self.minBudSize)
+            #%% define measurment masks
+            # unbufferedMcl is the best guess at the 'true outside edge' of 
+            # the cells; use it as the starting point to find a 10pixel thick 
+            # cortex
+            unbufferedCortexMcl = ympy.labelCortex_mcl(
+                    unbufferedMcl, self.cortexWidth)
+            # because the bright field and fluorescence are not perfectly 
+            # aligned, and to handle inaccuracies in edge finding, also buffer 
+            # out from the outside edge
+            buffer = ympy.buffer_mcl(
+                    unbufferedMcl, self.bufferSize, self.showProgress)
+            # merge this buffer onto the unbufferedMcl and the cortexMcl
+            masterCellLabel = ympy.merge_labelMcl(unbufferedMcl, buffer)
+            cortexMcl = ympy.merge_labelMcl(unbufferedCortexMcl, buffer)
+            
+            # use Otsu thresholding on the max projection of RFPmarker
+            markerMclOtsu = ympy.labelMaxproj(
+                    masterCellLabel, dvImage, self.mkrChannel)
+            # then use centroidCircles to uniformly mask peri-golgi regions
+            markerCirclesMcl = ympy.centroidCirclesMcl(
+                    markerMclOtsu.astype('bool'), masterCellLabel,
+                    self.markerRadius, self.markerCircleIterations)
+            # subtract so that marker localization has precedence over cortical
+            # localization
+            cortexMinusMarker = ympy.subtract_labelMcl(
+                    cortexMcl, markerCirclesMcl)
+            # finally, compute mask for remaining cytoplasmic regions
+            cytoplasmMcl =ympy.subtract_labelMcl(masterCellLabel,
+                    ympy.merge_labelMcl(markerCirclesMcl, cortexMinusMarker))
+            #%% measure
+            # measure Art1-mNG in the middle z-slice
+            primaryImage = {self.measuredProteinName:
+                dvImage[self.measuredProteinChannel,
+                        self.measuredProteinZ, :, :]}
+            # measure against buffered cortex (minus marker mask), marker, and  
+            # cytoplasm
+            refMclDict = {
+                    'cortex(non-' + self.markerName + ')': cortexMinusMarker,
+                    self.markerName + '(circles)': markerCirclesMcl,
+                    'cytoplasm': cytoplasmMcl,
+                          }
+            # also record field wide information
+            # measurement function
+            results = ympy.measure_cells(
+                    primaryImage, masterCellLabel, refMclDict,
+                    self.imageNameList[field], self.expID, field,
+                    globalMinG, globalMaxG, self.nHistBins, self.showProgress)
+            # add measurements from each field to total results
+            totalResults = list(np.concatenate((totalResults,results)))
+            #%% quality control prep
+            print('preparing quality control information')
+            greenFluor = dvImage[self.measuredProteinChannel,
+                                 self.measuredProteinZ,:,:].astype(float)
+            greenFluorScaled = ((greenFluor.astype('float')-globalMinG)
+                                /(globalMaxG-globalMinG))
+            redFluor = np.amax(
+                    dvImage[self.mkrChannel,:,:,:],axis=0).astype(float)
+            redFluorScaled = ((redFluor.astype('float')-globalMinR)
+                              /(globalMaxR-globalMinR))
+            qcMclList = [cortexMinusMarker, markerCirclesMcl]
+            rgbQC = ympy.prep_rgbQCImage(
+                    greenFluorScaled, redFluorScaled,
+                    qcMclList, self.rgbScalingFactors)
+            
+            # add qcStack to totalQC
+            totalQC.append(rgbQC)
+            # record field as analyzed
+            fieldsAnalyzed.append(field)
+            # save unbuffered masterCellLabel (it is the most computationally
+            # intensive to produce; other masks can be relatively quickly
+            # drived from it)
+            totalMcl.append(unbufferedMcl)
+            #%% pool and save
+            print('saving progress')
+            resultsDic = {'totalResults': totalResults,
+                       'totalQC': totalQC,
+                       'fieldsAnalyzed': fieldsAnalyzed,
+                       'totalMcl': totalMcl,
+                       'parameters': self.p
+                       }
+            pickle.dump(resultsDic,
+                        open(self.folderPath
+                               + '/results/'
+                               + str(datetime.datetime.now().date())
+                               + '_analysis.p', 'wb'))
+            print(self.imageNameList[field],
+                  ' complete at ', datetime.datetime.now())
+            if self.returnTotalResults:
+                return(resultsDic)
 
 def measure_GFP_wRFPmarker(folderPath, parameterDict):
     '''        
