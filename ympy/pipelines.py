@@ -168,7 +168,7 @@ class GFPwMarkerPipeline():
             # measurement function
             results = ympy.measure_cells(
                     primaryImage, masterCellLabel, refMclDict,
-                    self.imageNameList[field], self.expID, field,
+                    self.imageNameList[field], self.expIDlist[field], field,
                     globalMinG, globalMaxG, self.nHistBins, self.showProgress)
             # add measurements from each field to total results
             totalResults = list(np.concatenate((totalResults,results)))
