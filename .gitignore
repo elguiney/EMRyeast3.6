@@ -5,6 +5,13 @@ __pycache__/
 # jupyter notebook checkpoints
 *checkpoint.ipynb
 
+# tagged testing scripts
+testing/private*
+
+# ignore experiment managers once they are localized
+**[0-9].ipynb
+
+
 # C extensions
 *.so
 
