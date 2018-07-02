@@ -26,7 +26,7 @@ For the best experience, it is highly reccomended to install python3 and its sta
 dependences with [Anaconda](https://www.anaconda.com/distribution/)
 
 For use with DeltaVision microscopes and the .dv file format, requires
-- mrcfile ([github site](https://github.com/ccpem/mrcfile))
+- mrcfile ([github site](https://github.com/ccpem/mrcfile)) (pip install mrcfile)
 
 #### Features:
 - Takes advantage of bright-field microscopy to find accurate cell outlines without requiring a fluorescent marker
