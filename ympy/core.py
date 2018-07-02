@@ -14,7 +14,6 @@ extends methods to quantify flourescence localization against two markers
 import os
 import numpy as np
 import scipy as sp
-import mrcfile
 import warnings
 import scipy.ndimage as ndimage
 from skimage.measure import regionprops
@@ -22,8 +21,7 @@ from skimage import draw
 from skimage.filters import threshold_otsu
 import skimage.morphology as morph
 
-
-from ympy.helpers import progressBar_text, progressSpinner_text
+from ympy.helpers import progressBar_text, progressSpinner_text, readerHelper
 
 
 def batchParse(targetFolder, expIDloc, imageExtension='R3D_D3D.dv'):
@@ -45,62 +43,33 @@ def batchParse(targetFolder, expIDloc, imageExtension='R3D_D3D.dv'):
                 imagenameList.append(item)
                 expID = item[expIDloc[0]:expIDloc[1]]
                 expIDlist.append(expID)
-    folderData = {'imagenameList' : imagenameList,
-                   'pathlist' : pathlist,
-                   'nFields': len(pathlist),
-                   'expIDlist': expIDlist}
-    return folderData
+    folder_data = {'imagename_list' : imagenameList,
+                   'path_list' : pathlist,
+                   'n_fields': len(pathlist),
+                   'expID_list': expIDlist}
+    return folder_data
 
-def batchIntensityScale(folderData, channel, showProgress=True):
-    nFields = folderData['nFields']
-    pathList = folderData['pathlist']
+def batchIntensityScale(folder_data, image_reader, reader_args,
+                        channel, show_progress=True):
+    n_fields = folder_data['n_fields']
+    path_list = folder_data['path_list']
     maxlist = []
     minlist = []
-    for field in range(nFields):
-        dvImage = basicDVreader(
-                pathList[field],rolloff=64,nChannels=3,zFirst=True)
-        fieldMax = np.max(dvImage[channel,:,:,:])
+    for field in range(n_fields):
+        dv_image = image_reader(
+                **readerHelper(image_reader, path_list[field], reader_args))
+        fieldMax = np.max(dv_image[channel,:,:,:])
         maxlist.append(fieldMax)
-        fieldMin = np.min(dvImage[channel,:,:,:])
+        fieldMin = np.min(dv_image[channel,:,:,:])
         minlist.append(fieldMin)
-        if showProgress: progressBar_text(field,nFields,'scaling intensities')
-    if showProgress: print()
+        if show_progress: progressBar_text(
+                field, n_fields,'scaling intensities')
+    if show_progress: print()
     globalmax = np.max(maxlist)
     globalmin = np.min(minlist)
     result = {'globalmax':globalmax, 'globalmin':globalmin}
     return result
 
-def basicDVreader(imagePath, rolloff, nChannels=3, zFirst=True):
-    ''' very simple function to read .dv files as formatted by deltavision
-    microscopes.
-
-    imagePath is the complete file path of the image
-    for deconvolved images, rolloff specifies the width of the border in pixels
-        to be cropped before further processing
-    nChannels (defualt 3) is the number of fluorescence and bright field
-        channels
-    zFirst (default True); boolean, is the the order of the .dv tiff stack z-
-        first or channel-first (often, zFirst = True for R3D_D3D, zFirst = False
-        for R3D)
-    '''
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        with mrcfile.open(imagePath,permissive=True) as dv:
-            dvData = dv.data[:]
-            dvShape = dvData.shape
-            nZslices = int(dvShape[0]/nChannels)
-            dvImage = np.zeros([nChannels,nZslices,dvShape[1],dvShape[2]],
-                               dtype='uint16')
-            if zFirst:
-                for channel in range(nChannels):
-                    dvImage[channel,:,:,:] = dvData[channel*nZslices
-                                                    :channel*nZslices+nZslices,
-                                                    :,:]
-            else:
-                for channel in range(nChannels):
-                    dvImage[channel,:,:,:] = dvData[channel::nChannels,:,:]
-    dvImage = dvImage[:,:,rolloff:-rolloff,rolloff:-rolloff]
-    return dvImage
 
 def findLogZeros(image, logKernelSize, gradKernelSize, gradstrength,
                  gradmethod='any'):

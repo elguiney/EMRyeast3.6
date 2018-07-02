@@ -5,6 +5,51 @@ from skimage import draw
 import matplotlib.pyplot as plt
 import pickle
 import pandas as pd
+import mrcfile
+import warnings
+import inspect
+
+def readerHelper(image_reader, image_path, reader_args):
+    arglist = inspect.getfullargspec(image_reader)[0]
+    first_kwd = arglist[0]
+    reader_args.update({first_kwd: image_path})
+    return reader_args
+    
+
+def basicDVreader(image_path, n_channels=3, z_first=True):
+    ''' very simple function to read .dv files as formatted by deltavision
+    microscopes.
+
+    image_path is the complete file path of the image
+    for deconvolved images, rolloff specifies the width of the border in pixels
+        to be cropped before further processing
+    n_channels (defualt 3) is the number of fluorescence and bright field
+        channels
+    z_first (default True); boolean, is the the order of the .dv tiff stack z-
+        first or channel-first (often, z_first = True for R3D_D3D, 
+        z_first = False for R3D)
+    '''
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with mrcfile.open(image_path, permissive=True) as dv:
+            dvData = dv.data[:]
+            dvShape = dvData.shape
+            nZslices = int(dvShape[0]/n_channels)
+            dvImage = np.zeros([n_channels,nZslices,dvShape[1],dvShape[2]],
+                               dtype='uint16')
+            if z_first:
+                for channel in range(n_channels):
+                    dvImage[channel,:,:,:] = dvData[channel*nZslices
+                                                    :channel*nZslices+nZslices,
+                                                    :,:]
+            else:
+                for channel in range(n_channels):
+                    dvImage[channel,:,:,:] = dvData[channel::n_channels,:,:]
+    return dvImage
+
+def cropRolloff(image, rolloff):
+    imageCropped = image[:, :, rolloff:-rolloff, rolloff:-rolloff]
+    return imageCropped
 
 def mergeForTiff(imageList):
     ''' helper function to format a list of 2d-images, all with matching x,y

@@ -9,3 +9,4 @@ from ympy.core import *
 import ympy.helpers
 import ympy.qcDisplay
 import ympy.pipelines
+import ympy.parameterSets
