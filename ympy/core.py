@@ -847,57 +847,99 @@ def histAddCorrection(dataHist, correctionHist):
     resultHist = dataHist - inverseHist
     return(resultHist)
         
-def cortex_marker_histScore(resultsDict, parameterDict):
+def cortex_marker_histScore(resultsDict, YmpyParam):
     #extract and smooth histograms
-    p = parameterDict
-    cortexKey = (p['measuredProteinName'] + '_histogram_at_cortex(non-'
-                 + p['markerName'] + ')')
-    markerKey = (p['measuredProteinName'] + '_histogram_at_' +p['markerName'] 
+    p = YmpyParam
+    cortex_key = (p.measured_protein_name + '_histogram_at_cortex(non-'
+                 + p.marker_name + ')')
+    marker_key = (p.measured_protein_name + '_histogram_at_' + p.marker_name 
                  + '(circles)')
-    bkgKey = p['measuredProteinName'] + '_histogram_at_cytoplasm'
-    smoothingKernelWidth = p['smoothingKernelWidth']
-    smoothingKernel = np.ones(smoothingKernelWidth)/smoothingKernelWidth
-    totalKey = 'total_' + p['measuredProteinName'] + '_histogram'
-    cortexHist = np.convolve(
-            resultsDict[cortexKey], smoothingKernel, mode='same')
-    markerHist = np.convolve(
-            resultsDict[markerKey], smoothingKernel, mode='same')
-    bkgrndHist = np.convolve(
-            resultsDict[bkgKey], smoothingKernel, mode='same')   
+    bkg_key = p.measured_protein_name + '_histogram_at_cytoplasm'
+    smoothing_kernel_width = p.smoothing_kernel_width
+    smoothing_kernel = np.ones(smoothing_kernel_width)/smoothing_kernel_width
+    total_key = 'total_' + p.measured_protein_name + '_histogram'
+    cortex_hist = np.convolve(
+            resultsDict[cortex_key], smoothing_kernel, mode='same')
+    marker_hist = np.convolve(
+            resultsDict[marker_key], smoothing_kernel, mode='same')
+    bkgrnd_hist = np.convolve(
+            resultsDict[bkg_key], smoothing_kernel, mode='same')   
     total_Hist = np.convolve(
-            resultsDict[totalKey], smoothingKernel, mode='same')
+            resultsDict[total_key], smoothing_kernel, mode='same')
     #check for cells with no bkgHist defined, pass nan
-    if np.sum(bkgrndHist) == 0:
-        (cortexHSum, markerHSum, total_HSum, 
-         cortexHArea, markerHArea, total_HArea) = 6*(np.nan,)
+    if np.sum(bkgrnd_hist) == 0:
+        (cortex_hdif, cortex_hsum, cortex_hdif_area, cortex_hadd_area
+         marker_hdif, marker_hsum, marker_hdif_area, marker_hadd_area
+         total_hdif, total_hsum, total_hdif_area, total_hadd_area
+         ) = 12 * (np.nan,)
     else:
-        #cacluate
-        cortexSubHist = histSubCorrection(cortexHist, bkgrndHist)
-        markerSubHist = histSubCorrection(markerHist, bkgrndHist)
-        total_AddHist = histAddCorrection(total_Hist, bkgrndHist)
-        cortexHSum = np.sum((np.arange(p['nHistBins'])+1)*cortexSubHist)
-        markerHSum = np.sum((np.arange(p['nHistBins'])+1)*markerSubHist)
-        total_HSum = np.sum((np.arange(p['nHistBins'])+1)*total_AddHist)
-        cortexHArea = np.sum(cortexSubHist)
-        markerHArea = np.sum(markerSubHist)
-        total_HArea = np.sum(total_AddHist)
-             
+        #weight histograms
+        #subCorrection removes pixels with intensities matching the cytoplasmic
+        #histogram profile (bkgrnd_hist)
+        #addCorrection removes pixels with intensities below the cytoplasmic
+        # histogram profile
+        cortex_sub_hist = histSubCorrection(cortex_hist, bkgrnd_hist)
+        cortex_add_hist = histAddCorrection(total_Hist, bkgrnd_hist)
+        marker_sub_hist = histSubCorrection(marker_hist, bkgrnd_hist)
+        marker_add_hist = histAddCorrection(total_Hist, bkgrnd_hist)
+        total_sub_hist = histSubCorrection(marker_hist, bkgrnd_hist)
+        total_add_hist = histAddCorrection(total_Hist, bkgrnd_hist)
+        #measure; hdif is total intensity at pixels brighter than cytoplasm
+        
+        
+        cortex_hdif = np.sum((np.arange(p.n_hist_bins)+1) * cortex_sub_hist)
+        cortex_hsum = np.sum((np.arange(p.n_hist_bins)+1) * cortex_add_hist)
+        marker_hdif = np.sum((np.arange(p.n_hist_bins)+1) * marker_sub_hist)
+        marker_hsum = np.sum((np.arange(p.n_hist_bins)+1) * marker_add_hist)
+        total_hdif = np.sum((np.arange(p.n_hist_bins)+1) * total_sub_hist)
+        total_hsum = np.sum((np.arange(p.n_hist_bins)+1) * total_add_hist)
+        
+        cortex_hdif_area = np.sum(cortex_sub_hist)
+        cortex_hadd_area = np.sum(cortex_add_hist)
+        marker_hdif_area = np.sum(marker_sub_hist)
+        marker_hadd_area = np.sum(marker_add_hist)
+        total_hdif_area = np.sum(total_sub_hist)
+        total_hadd_area = np.sum(total_add_hist)
+        
+    # build column names
+    c_hdif_key = 'cortex(non-{})_{}_histogram-dif'.format(
+            p.marker_name, p.measured_protein_name)
+    c_hsum_key = 'cortex(non-{})_{}_histogram-sum'.format(
+            p.marker_name, p.measured_protein_name)
+    c_adif_key = 'cortex(non-{})_{}_histogram-dif-area'.format(
+            p.marker_name, p.measured_protein_name)
+    c_asum_key = 'cortex(non-{})_{}_histogram-sum-area'.format(
+            p.marker_name, p.measured_protein_name)
+    m_hdif_key = '{}(ciricles)_{}_histogram-dif'.format(
+            p.marker_name, p.measured_protein_name)
+    m_hsum_key = '{}(ciricles)_{}_histogram-sum'.format(
+            p.marker_name, p.measured_protein_name)
+    m_adif_key = '{}(ciricles)_{}_histogram-dif-area'.format(
+            p.marker_name, p.measured_protein_name)
+    m_asum_key = '{}(ciricles)_{}_histogram-sum-area'.format(
+            p.marker_name, p.measured_protein_name)    
+    t_hdif_key = 'total_cell_{}_histogram-dif'.format(
+            p.measured_protein_name)
+    t_hsum_key = 'total_cell_{}_histogram-sum'.format(
+            p.measured_protein_name)
+    t_adif_key = 'total_cell_{}_histogram-dif-area'.format(
+            p.measured_protein_name)
+    t_asum_key = 'total_cell_{}_histogram-sum-area'.format(
+            p.measured_protein_name)
     #put in dictionary
     hScores = {
-            ('cortex(non-' + p['markerName'] + ')_' + p['measuredProteinName']
-                + '_HSum'):cortexHSum,
-            ('cortex(non-' + p['markerName'] + ')_' + p['measuredProteinName']
-                + '_HArea'):cortexHArea,
-            ('cortex(non-' + p['markerName'] + ')_' + p['measuredProteinName']
-                + '_HBrightness'):cortexHSum/total_HArea,
-            (p['markerName'] + '(circles)_' + p['measuredProteinName'] 
-                + '_HSum'):markerHSum,
-            (p['markerName'] + '(circles)_' + p['measuredProteinName'] 
-                + '_HArea'):markerHArea,
-            (p['markerName'] + '(circles)_' + p['measuredProteinName']
-                + '_HBrightness'):markerHSum/total_HArea,
-            'total_cell_' + p['measuredProteinName'] + '_HSum':total_HSum,
-            'total_cell_' + p['measuredProteinName'] + '_HArea':total_HArea
+            c_hdif_key: cortex_hdif
+            c_hsum_key: cortex_hsum
+            c_adif_key: cortex_hdif_area
+            c_asum_key: cortex_hadd_area
+            m_hdif_key: marker_hdif
+            m_hsum_key: marker_hsum
+            m_adif_key: marker_hdif_area
+            m_asum_key: marker_hadd_area              
+            t_hdif_key: total_hdif
+            t_hsum_key: total_hsum
+            t_adif_key: total_hdif_area
+            t_asum_key: total_hadd_area
             }
     return(hScores)
     
