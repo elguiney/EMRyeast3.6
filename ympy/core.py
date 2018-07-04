@@ -14,7 +14,6 @@ extends methods to quantify flourescence localization against two markers
 import os
 import numpy as np
 import scipy as sp
-import warnings
 import scipy.ndimage as ndimage
 from skimage.measure import regionprops
 from skimage import draw
@@ -868,8 +867,8 @@ def cortex_marker_histScore(resultsDict, YmpyParam):
             resultsDict[total_key], smoothing_kernel, mode='same')
     #check for cells with no bkgHist defined, pass nan
     if np.sum(bkgrnd_hist) == 0:
-        (cortex_hdif, cortex_hsum, cortex_hdif_area, cortex_hadd_area
-         marker_hdif, marker_hsum, marker_hdif_area, marker_hadd_area
+        (cortex_hdif, cortex_hsum, cortex_hdif_area, cortex_hadd_area,
+         marker_hdif, marker_hsum, marker_hdif_area, marker_hadd_area,
          total_hdif, total_hsum, total_hdif_area, total_hadd_area
          ) = 12 * (np.nan,)
     else:
@@ -928,18 +927,18 @@ def cortex_marker_histScore(resultsDict, YmpyParam):
             p.measured_protein_name)
     #put in dictionary
     hScores = {
-            c_hdif_key: cortex_hdif
-            c_hsum_key: cortex_hsum
-            c_adif_key: cortex_hdif_area
-            c_asum_key: cortex_hadd_area
-            m_hdif_key: marker_hdif
-            m_hsum_key: marker_hsum
-            m_adif_key: marker_hdif_area
-            m_asum_key: marker_hadd_area              
-            t_hdif_key: total_hdif
-            t_hsum_key: total_hsum
-            t_adif_key: total_hdif_area
-            t_asum_key: total_hadd_area
+            c_hdif_key: cortex_hdif,
+            c_hsum_key: cortex_hsum,
+            c_adif_key: cortex_hdif_area,
+            c_asum_key: cortex_hadd_area,
+            m_hdif_key: marker_hdif,
+            m_hsum_key: marker_hsum,
+            m_adif_key: marker_hdif_area,
+            m_asum_key: marker_hadd_area,              
+            t_hdif_key: total_hdif,
+            t_hsum_key: total_hsum,
+            t_adif_key: total_hdif_area,
+            t_asum_key: total_hadd_area,
             }
     return(hScores)
     
