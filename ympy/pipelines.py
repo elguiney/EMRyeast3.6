@@ -22,7 +22,7 @@ class GFPwMarkerPipeline():
         total = self.analyzeRange()[1] - self.analyzeRange()[0]
         self.history.append('entered main loop')
         for field in range(*self.analyzeRange()):
-            self.field_log = [self.history.pop()]
+            self.field_log = self.history.pop()
             self.current_field = field
             print('field #{} of {} total'.format(field, total))
             image = self.readCurrentField()
@@ -33,9 +33,8 @@ class GFPwMarkerPipeline():
             self.measureSingleField(
                     ref_mcl_dict,
                     image)
-            self.buildQCfield(image)
             self.fieldsAnalyzed.append(field)
-            self.totalMcl.append(master_cell_label)
+            self.totalMcl.append(self.buffered_master_cell_label)
             self.saveState()
 
     def __init__(self, experiment_parameter_dict):
@@ -48,7 +47,7 @@ class GFPwMarkerPipeline():
                 self.Param.image_extension)
                 # initialize experiment variables
         self.totalResults = []
-        self.totalQC = []
+        self.total_bool_masks = []
         self.fieldsAnalyzed = []
         self.totalMcl = []
         self.history = ['initialized']
@@ -183,31 +182,38 @@ class GFPwMarkerPipeline():
                 image,
                 self.Param.marker_channel)
         # then use centroidCircles to uniformly mask peri-golgi regions
-        self.marker_mcl_ccadjusted = ympy.centroidCirclesMcl( 
+        marker_mcl_ccadjusted = ympy.centroidCirclesMcl( 
                 marker_mcl_otsu.astype('bool'), 
                 self.buffered_master_cell_label,
                 self.Param.marker_radius, 
                 self.Param.marker_circle_iterations)
         # subtract so that marker localization has precedence over cortical
         # localization
-        self.cortex_mcl_nonmarker = ympy.subtract_labelMcl( 
+        cortex_mcl_nonmarker = ympy.subtract_labelMcl( 
                 full_cortex_mcl, 
-                self.marker_mcl_ccadjusted)
+                marker_mcl_ccadjusted)
         # finally, compute mask for remaining cytoplasmic regions
         cytoplasm_mcl = ympy.subtract_labelMcl(
                 self.buffered_master_cell_label,
                 ympy.merge_labelMcl(
-                        self.marker_mcl_ccadjusted,
-                        self.cortex_mcl_nonmarker))
-        ref_mcl_dict = {
+                        marker_mcl_ccadjusted,
+                        cortex_mcl_nonmarker))
+        self.ref_mcl_dict = {
                 'cortex(non-{})'.format(self.Param.marker_name):
-                        self.cortex_mcl_nonmarker,
+                        cortex_mcl_nonmarker,
                 '{}(circles)'.format(self.Param.marker_name):
-                        self.marker_mcl_ccadjusted,
+                        marker_mcl_ccadjusted,
                 'cytoplasm': cytoplasm_mcl}
         self.field_log.append('built measurement masks for field #'
                               + str(self.current_field))
-        return(ref_mcl_dict)
+        self.bool_masks = {
+                'cortex(non-{})_mask'.format(self.Param.marker_name):
+                        cortex_mcl_nonmarker.astype(bool),
+                '{}(circles)_mask'.format(self.Param.marker_name):
+                        marker_mcl_ccadjusted.astype(bool),
+                'unbuffered_mask':
+                        master_cell_label.astype(bool)
+                }
         
         #%% measure
         
@@ -241,32 +247,6 @@ class GFPwMarkerPipeline():
         self.field_log.append('measured fluorescence for field #'
                               + str(self.current_field))
         self.totalResults = list(np.concatenate((self.totalResults, results)))
-        
-        #%% quality control prep
-        
-    def buildQCfield(self, image):
-        print('preparing quality control information')
-        green_fluor = image[self.Param.measured_protein_channel, 
-                            self.Param.measured_protein_z, :, :].astype(float)
-        green_fluor_scaled = ((green_fluor.astype('float') 
-                               - self.global_extrema['green']['globalmin'])
-                              / (self.global_extrema['green']['globalmax']
-                                 - self.global_extrema['green']['globalmin']))
-        red_fluor = np.amax(
-                image[self.Param.marker_channel,:,:,:], axis=0).astype(float)
-        red_fluor_scaled = ((red_fluor.astype('float') 
-                               - self.global_extrema['red']['globalmin'])
-                              / (self.global_extrema['red']['globalmax']
-                                 - self.global_extrema['red']['globalmin']))
-        qc_mcl_list = [self.cortex_mcl_nonmarker, self.marker_mcl_ccadjusted]
-        rgb_qc = ympy.prep_rgbQCImage(
-                green_fluor_scaled,
-                red_fluor_scaled,
-                qc_mcl_list,
-                self.Param.rgb_scaling_factors)
-        self.field_log.append('built quality control image for field #'
-                              + str(self.current_field))
-        self.totalQC.append(rgb_qc)
 
     #%% pool and save
 
@@ -281,7 +261,8 @@ class GFPwMarkerPipeline():
                 'fieldsAnalyzed': self.fieldsAnalyzed,
                 'totalMcl': self.totalMcl,
                 'parameters': self.Param.listParameters(),
-                'object_history': self.history
+                'object_history': self.history,
+                'total_bool_masks': self.bool_masks
                 }
         date_today = str(datetime.datetime.now().date())
         save_path = '{}/results/{}_analysis.p'.format(
