@@ -610,6 +610,7 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
             dist = distBuffCells[point]
     bufferedCells[overlapsSkeleton == 1] = 0
     labeledBuffer, nLblBuffer = ndimage.label(bufferedCells)
+    tablet = np.zeros_like(labeledBuffer)
     #%% relabel to match mcl
     mclCentroids = np.array(
             ndimage.measurements.center_of_mass(
@@ -619,21 +620,22 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
         centroid = (y,x)
         bufferLbl = labeledBuffer[centroid]
         if bufferLbl != 0:
-            labeledBuffer[labeledBuffer == bufferLbl] = cellLbl
+            tablet[labeledBuffer == bufferLbl] = cellLbl
+            # check for 
         else: #try to contain the damage. Segmentation cleanup artifacts are a bitch
-            bufferLblList = labeledBuffer[np.where(unbufferedMcl==33)]
+            bufferLblList = labeledBuffer[unbufferedMcl == cellLbl]
             bufferLblList = bufferLblList[bufferLblList != 0]
             (values,counts) = np.unique(bufferLblList,return_counts=True)
             if values.size:
                 # only continue if the guess has at least one nonzero element
                 guessLbl = values[np.argmax(counts)]
                 # kill it. it is an abomination.
-                labeledBuffer[labeledBuffer == guessLbl] = 0
-    labeledBuffer[unbufferedMcl != 0] = 0
-    uniqueNewLabels = np.unique(labeledBuffer)
+                tablet[labeledBuffer == guessLbl] = 0
+    tablet[unbufferedMcl != 0] = 0
+    uniqueNewLabels = np.unique(tablet)
     diffLabels = np.setdiff1d(uniqueNewLabels,uniqueLabels)
     for diff in diffLabels:
-        labeledBuffer[labeledBuffer==diff]=0
+        tablet[labeledBuffer==diff]=0
     if showProgress: print('finsishing')
     return labeledBuffer
 
