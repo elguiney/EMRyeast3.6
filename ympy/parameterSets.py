@@ -73,4 +73,6 @@ class YmpyParam():
         for k, v in self.__dict__.items():
             print('{}: {}'.format(k, v))
     def listParameters(self):
-        return self.__dict__
+        printDict = dict(self.__dict__)
+        printDict['image_reader'] = str(self.image_reader)
+        return printDict
