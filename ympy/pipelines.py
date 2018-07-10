@@ -278,13 +278,14 @@ class GFPwMarkerPipeline():
         print('saving progress')
         self.fieldsAnalyzed.append(self.current_field)
         self.totalMcl.append(self.buffered_master_cell_label)
+        self.total_bool_masks.append(self.bool_masks)
         resultsDic = {
                 'totalResults': self.totalResults,
                 'fieldsAnalyzed': self.fieldsAnalyzed,
                 'totalMcl': self.totalMcl,
                 'parameters': self.Param.listParameters(),
                 'object_history': self.history,
-                'total_bool_masks': self.bool_masks
+                'total_bool_masks': self.total_bool_masks
                 }
         date_today = str(datetime.datetime.now().date())
         save_path = '{}/results/{}_analysis.p'.format(
