@@ -368,14 +368,12 @@ def bfCellMorphCleanup(mcl, showProgress,
     minAngleRads = (float(minAngle)/180*np.pi)
     closeStruct = morph.disk(closeRadius,dtype='float')
     cleanedMcl = np.zeros(np.shape(mcl),dtype='int16')
-    #resegment mcl
-    flatMcl = mcl.astype('bool')
-    relabeledMcl, nCells = ndimage.label(flatMcl)
     idxOffset = 0
+    nCells = np.max(mcl)
     for cell in range(nCells):
         cellIdx = cell + 1
         masterCellMask = np.zeros(np.shape(mcl), dtype='bool')
-        masterCellMask[relabeledMcl==cellIdx] = 1
+        masterCellMask[mcl==cellIdx] = 1
         try:
             cellIdx = cellIdx + idxOffset
             cellProps = regionprops(masterCellMask.astype('int'))
@@ -637,7 +635,7 @@ def buffer_mcl(unbufferedMcl, bufferSize, showProgress):
     for diff in diffLabels:
         tablet[labeledBuffer==diff]=0
     if showProgress: print('finsishing')
-    return labeledBuffer
+    return tablet
 
 def centroidCirclesMcl(mask, masterCellLabel, radius, iterations=1):
     #%% make centroid circles
