@@ -12,8 +12,9 @@ import inspect
 def readerHelper(image_reader, image_path, reader_args):
     arglist = inspect.getfullargspec(image_reader)[0]
     first_kwd = arglist[0]
-    reader_args.update({first_kwd: image_path})
-    return reader_args
+    reader_arg_dict = dict(reader_args)
+    reader_arg_dict.update({first_kwd: image_path})
+    return reader_arg_dict
     
 
 def basicDVreader(image_path, n_channels=3, z_first=True):
