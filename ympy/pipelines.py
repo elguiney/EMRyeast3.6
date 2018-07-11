@@ -7,6 +7,10 @@ import pickle
 import numpy as np
 import datetime
 import os
+import pandas as pd
+import random
+import scipy.ndimage as ndimage
+import cv2
 
 import ympy
 from ympy.parameterSets import YmpyParam
@@ -279,6 +283,9 @@ class GFPwMarkerPipeline():
         self.fieldsAnalyzed.append(self.current_field)
         self.totalMcl.append(self.buffered_master_cell_label)
         self.total_bool_masks.append(self.bool_masks)
+        self.field_log.append('saved state after analysis of field #'
+                              + str(self.current_field))        
+        self.history.append(self.field_log)
         resultsDic = {
                 'totalResults': self.totalResults,
                 'fieldsAnalyzed': self.fieldsAnalyzed,
@@ -293,10 +300,6 @@ class GFPwMarkerPipeline():
         pickle.dump(resultsDic, open(save_path, 'wb'))
         print(self.folder_data['imagename_list'][self.current_field],
               ' complete at ', datetime.datetime.now())
-        self.field_log.append('saved state after analysis of field #'
-                      + str(self.current_field))
-        
-        self.history.append(self.field_log)
         self._saved = True
     
     #%% helper methods
@@ -338,4 +341,220 @@ class GFPwMarkerPipeline():
             start = self.Param.measure_fields[0]
             stop = self.Param.measure_fields[1]
         return(start, stop)
+
+class QualityControlPipeline():
+    def __init__(self, results_path, experiment_parameter_dict):
+        total_results_dict = pickle.load(open(results_path, 'rb'))
+        self.total_mcl = total_results_dict['totalMcl']
+        self.total_bool_masks = total_results_dict['total_bool_masks']
+        self.Param = YmpyParam(experiment_parameter_dict)
+        self.history = total_results_dict['object_history']
+        self.folder_data = ympy.batchParse(
+                self.Param.folder_path, self.Param.exp_ID_loc,
+                self.Param.image_extension)
+        self.history.append('entered QualityControlPipeline')
+        # assemble dataframes
+        # results_df is the top level dataframe
+        self.results_df = pd.DataFrame(total_results_dict['totalResults'])
+        random_idx = list(range(len(self.results_df)))
+        random.shuffle(random_idx, random.seed(results_path))        
+        self.results_df = self.results_df.assign(randomIdx = random_idx)
+        # working, accepted and rejected for sorting cells during qc
+        self.working_df = pd.DataFrame({})
+        self.accepted_df = pd.DataFrame({})
+        self.rejected_df = pd.DataFrame({})
+        self.sortQCDF()
+    def prefilterQC(self):
+        no_cytoplasm_mask = self.results_df['cytoplasm_area'] == 0  
+        self.results_df.loc[no_cytoplasm_mask, 'qcStatus'] = 'autorejected'
+        mrk_column_name = '{}(circles)_area'.format(self.Param.marker_name)
+        mrk_noarea_mask = self.results_df[mrk_column_name] == 0
+        self.results_df.loc[mrk_noarea_mask, 'qcStatus'] = 'autorejected'
+        n_rejected = (self.results_df['qcStatus']
+                      .str.contains('autorejected').sum())
+        self.history.append('autorejected {} cells with zero area marker or'
+                            ' cytoplasm masks'.format(n_rejected))
+        self.sortQCDF()
+    def sortQCDF(self):
+        work_locs = self.results_df['qcStatus'].str.contains('unreviewed')
+        accepted_locs = self.results_df['qcStatus'].str.contains('accepted')
+        rejected_locs = self.results_df['qcStatus'].str.contains('rejected')
+        autorejected_locs = self.results_df['qcStatus'].str.contains(
+                'autorejected')
+        self.working_df = self.results_df[work_locs]
+        self.accepted_df = self.results_df[accepted_locs]
+        self.rejected_df = self.results_df[rejected_locs | autorejected_locs]
+        
+class QCframeLib():
+    def __init__(self, QualityControlPipeline, array_size=(5,5), frame_size=225):
+        
+        self.array_size = array_size
+        self.frame_size = frame_size
+        self.QCpipe = QualityControlPipeline
+        self._ctx_key = 'cortex(non-{})_mask'.format(
+                self.QCpipe.Param.marker_name)
+        self._mk_key = '{}(circles)_mask'.format(
+                self.QCpipe.Param.marker_name)
+        self.initializeLibrary()
+        
+    def initializeLibrary(self):
+        abscounter = 0
+        p = self.QCpipe.Param
+        index_series = self.QCpipe.working_df.index
+        self.framelib = pd.DataFrame(index=index_series,
+                                     columns=['red', 'green', 'colormask',
+                                              'markermask','cortexmask',],
+                                     dtype=object)
+        current_field_idx = -1
+        previous_field_idx = -1
+        for df_idx in index_series:
+            current_field_idx = self.QCpipe.results_df.loc[df_idx, 'fieldIdx']
+            if current_field_idx is not previous_field_idx:
+                field_path = self.QCpipe.folder_data[
+                        'path_list'][current_field_idx]
+                expanded_args = ympy.helpers.readerHelper(
+                        p.image_reader, field_path, p.reader_args)
+                current_image = p.image_reader(**expanded_args)
+                current_image = ympy.helpers.cropRolloff(
+                        current_image, p.image_rolloff)
+                current_green = current_image[p.measured_protein_channel,
+                                              p.measured_protein_z,::
+                                              ].astype(float)
+                current_red = np.amax(current_image[p.marker_channel,:,:,:
+                                                    ], axis=0).astype(float)
+                current_mcl = self.QCpipe.total_mcl[current_field_idx]
+                current_marker_bool = self.QCpipe.total_bool_masks[
+                        current_field_idx][self._mk_key]
+                current_cortex_bool = self.QCpipe.total_bool_masks[
+                        current_field_idx][self._ctx_key]
+            cell_lbl = self.QCpipe.results_df.loc[df_idx, 'localLbl']
+            cell_tablet = np.zeros(current_mcl.shape, dtype=bool)
+            cell_tablet[np.abs(current_mcl) == cell_lbl] = 1
+            #TODO functionailze this:
+            #start
+            bounds = np.where(cell_tablet)
+            cell_top, cell_bottom, cell_left, cell_right = (
+                    bounds[0].min(), bounds[0].max(),
+                    bounds[1].min(), bounds[1].max())
+            mid_y = cell_top + (cell_bottom-cell_top)/2
+            mid_x = cell_left + (cell_right-cell_left)/2
+            lower_bound = self.frame_size/2
+            upper_bound_y = current_green.shape[0] -  lower_bound
+            upper_bound_x = current_green.shape[1] -  lower_bound
+            use_y = min(max(lower_bound, mid_y), upper_bound_y)
+            use_x =  min(max(lower_bound, mid_x), upper_bound_x)
+            top = int(use_y-self.frame_size/2)
+            bottom =  int(use_y + self.frame_size/2)
+            left = int(use_x-self.frame_size/2)
+            right =  int(use_x + self.frame_size/2)
+            #end
+            mkr_tablet = np.zeros(current_mcl.shape, dtype=bool)
+            mkr_tablet[cell_tablet & current_marker_bool] = 1
+            mkr_tablet = mkr_tablet ^ ndimage.binary_erosion(mkr_tablet)
+            ctx_tablet = np.zeros(current_mcl.shape, dtype=bool)
+            ctx_tablet[cell_tablet & current_cortex_bool] = 1
+            ctx_tablet = ctx_tablet ^ ndimage.binary_erosion(ctx_tablet)
+            self.framelib.at[df_idx,'red'] = current_red[top:bottom,
+                                                          left:right]
+            self.framelib.at[df_idx,'green'] = current_green[top:bottom,
+                                                              left:right]
+            self.framelib.at[df_idx,'colormask'] = cell_tablet[top:bottom,
+                                                                left:right]
+            self.framelib.at[df_idx,'markermask'] = mkr_tablet[top:bottom,
+                                                                left:right]
+            self.framelib.at[df_idx,'cortexmask'] = ctx_tablet[top:bottom,
+                                                                left:right]
+            if p.show_progress:
+                ympy.helpers.progressBar_text(abscounter,
+                                              len(index_series),
+                                              'building frame library')
+                abscounter += 1
+    def assembleNewQCPage(self, indexSeries):
+        #make blank page according to array size
+        row_size = self.array_size[0]*self.frame_size
+        col_size = self.array_size[1]*self.frame_size
+        self.qcpage = np.zeros((row_size,col_size,3))
+        self.idxpage = np.zeros((row_size,col_size), dtype=int)
+        for idx, df_idx in enumerate(indexSeries):
+            col = idx % self.array_size[0]
+            row = idx // self.array_size[1]
+            qc_frame = self.assembleColoredFrame(df_idx)
+            idx_frame = np.ones(2*[self.frame_size], dtype=int)*int(idx)
+            self.qcpage = self.placeFrame(row, col, qc_frame, self.qcpage)
+            self.idxpage = self.placeFrame(row, col, idx_frame, self.idxpage)
+    def assembleBaseFrame(self, df_idx):
+        cortexmask = self.framelib.loc[df_idx,'cortexmask']
+        markermask = self.framelib.loc[df_idx,'markermask']
+        red = self.scaleFrame(self.framelib.loc[df_idx,'red'], 1.2)
+        red[cortexmask + markermask] = 1
+        green = self.scaleFrame(self.framelib.loc[df_idx,'green'], 1.2)
+        green[markermask] = 1
+        blue = np.zeros((self.frame_size, self.frame_size))
+        blue[cortexmask + markermask] = 1
+        red = red.reshape(self.frame_size, self.frame_size, 1)
+        green = green.reshape(self.frame_size, self.frame_size, 1)
+        blue = blue.reshape(self.frame_size, self.frame_size, 1)
+        base_image = np.concatenate((blue, green, red), axis=2)
+        return base_image
+    def assembleGrayFrame(self, df_idx):
+        base_image = self.assembleBaseFrame(df_idx)
+        gray_frame = np.max(base_image, axis=2)
+        gray = gray_frame.reshape(self.frame_size, self.frame_size, 1)
+        gray_image = np.concatenate(3*[gray], axis=2)
+        return gray_image
+    def assembleColoredFrame(self, df_idx):
+        base_image = self.assembleBaseFrame(df_idx)
+        gray_image = self.assembleGrayFrame(df_idx)
+        colormask = self.framelib.loc[df_idx, 'colormask']
+        colormask_image = np.concatenate(3*[colormask.reshape(
+                self.frame_size, self.frame_size, 1)], axis=2)
+        colored_cell_image = np.array(gray_image)
+        colored_cell_image[colormask_image] = base_image[colormask_image]
+        return colored_cell_image        
+    def placeFrame(self, row, col, frame, page):
+        if len(page.shape) == 3: is_rgb = True
+        else: is_rgb = False
+        top = row*self.frame_size
+        bottom = (row+1)*self.frame_size
+        left = col*self.frame_size
+        right = (col+1)*self.frame_size
+        if is_rgb:
+            for z in range(page.shape[2]):
+                page[top:bottom, left:right, z] = frame[:, :, z]
+        else:
+            page[top:bottom, left:right] = frame
+        return page
+    def assembleDetails(self):
+        foo
+    def scaleFrame(self, frame, factor):
+        frame = (frame-np.min(frame)) * factor/(np.max(frame)-np.min(frame))
+        frame[frame > 1] = 1
+        return frame
+    def click_cv2(self, event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            idx_click = self.idxpage[y,x]
+            df_idx_click = self.qcIdxSeries.iloc[idx_click]
+            self._clickerstatus[idx_click] = ~self._clickerstatus[idx_click]
+            print(df_idx_click)
+            col_click = idx_click % self.array_size[0]
+            row_click = idx_click // self.array_size[1]
+            if self._clickerstatus[idx_click]:
+                frame = self.assembleGrayFrame(df_idx_click)
+                self.placeFrame(row_click, col_click, frame, self.qcpage)
+            else:
+                frame = self.assembleColoredFrame(df_idx_click)
+                self.placeFrame(row_click, col_click, frame, self.qcpage)                
+    def displayForQC(self):
+        cv2.namedWindow('qc_window', cv2.WINDOW_NORMAL)
+        cv2.setMouseCallback('qc_window', self.click_cv2)
+        self.qcIdxSeries = pd.Series(self.QCpipe.working_df.iloc[0:25].index)
+        self.assembleNewQCPage(self.qcIdxSeries)
+        self._clickerstatus = np.zeros(25, dtype=bool)
+        while True:
+            cv2.imshow('qc_window', self.qcpage)
+            key = cv2.waitKey(1)
+            if key == ord('q'):
+                break
+            
+        
     
