@@ -407,8 +407,36 @@ class QualityControlPipeline():
         self.working_df = self.results_df[work_locs]
         self.accepted_df = self.results_df[accepted_locs]
         self.rejected_df = self.results_df[rejected_locs | autorejected_locs]
-    def callQDframeLib(self, *args):
-        self.QQframeLib = QCframeLib(self, *args)
+    def callQCframeLib(self, *args):
+        self.QCframeLib = QCframeLib(self, *args)
+    def expandExpIDs(self, use_expid_headers='none'):
+        # map dictionary in parameters to expID in results df
+        labels = self.results_df.map(self.Param.expid_lookup).values.tolist()
+        if 'column_names' in self.Param.expid_lookup:
+            label_names = self.Param.expid_lookup['column_names']
+        else: label_names = use_expid_headers
+        self.results_df.join(pd.DataFrame(labels,
+                                          index=self.results_df.index,
+                                          columns=label_names))
+        # expand experiment labels for checking consistency between each 
+        # experiment
+        topdirs = [(d.path) for d in os.scandir(self.Params.folder_path)
+                   if d.is_dir()]
+        experiment_list = []
+        for fieldIdx in self.results_df['fieldIdx']:
+            path = self.folder_data['path_list'][fieldIdx]
+            for idx, d in enumerate(topdirs):
+                if os.path.commonpath((d,path)) == os.path.abspath(d):
+                    experiment_list.append((idx, os.path.basename(d)))
+        if len(experiment_list) == len(self.results_df):
+            self.results.df = self.results_df.join(
+                    pd.DataFrame(experiment_list,
+                                 index=self.results_df.index,
+                                 columns=['exp_number',
+                                          'exp_name']))
+        else: self.results_df = self.results_df.assign(exp_number='unknown',
+                                                       exp_name='unknown')
+        
         
 class QCframeLib():
     def __init__(self, QualityControlPipeline, array_size=(4,8), frame_size=150):
@@ -463,7 +491,7 @@ class QCframeLib():
             cell_lbl = self.QCpipe.results_df.loc[df_idx, 'localLbl']
             cell_tablet = np.zeros(current_mcl.shape, dtype=bool)
             cell_tablet[np.abs(current_mcl) == cell_lbl] = 1
-            #TODO functionailze this:
+            #TODO functionalze this:
             #start
             bounds = np.where(cell_tablet)
             cell_top, cell_bottom, cell_left, cell_right = (
@@ -526,9 +554,18 @@ class QCframeLib():
     def assembleBaseFrame(self, df_idx):
         cortexmask = self.framelib.loc[df_idx,'cortexmask'].toarray()
         markermask = self.framelib.loc[df_idx,'markermask'].toarray()
-        red = self.scaleFrame(self.framelib.loc[df_idx,'red'], 1.2)
+        red = self.scaleFrame(self.framelib.loc[df_idx,'red'],
+                              1.2,
+                              cellmask=self.framelib.loc[
+                                      df_idx, 'colormask'].toarray(),
+                              method='max')
         red[cortexmask + markermask] = 1
-        green = self.scaleFrame(self.framelib.loc[df_idx,'green'], 1.2)
+        green = self.scaleFrame(self.framelib.loc[df_idx,'green'],
+                                1.2,
+                                cellmask=self.framelib.loc[
+                                        df_idx, 'colormask'].toarray(),
+                                method=self.QCpipe.
+                                        Param.scale_green_frame_method)
         green[markermask] = 1
         blue = np.zeros((self.frame_size, self.frame_size))
         blue[cortexmask + markermask] = 1
@@ -602,12 +639,18 @@ class QCframeLib():
         top, bottom, left, right = (
                 bounds[0].min(), bounds[0].max()+1,
                 bounds[1].min(), bounds[1].max()+1)
-        green_inv_fr = -1*(self.scaleFrame(current_green[top:bottom,
-                                                         left:right], 1.2) -1)
-        red_inv_fr = -1*(self.scaleFrame(current_red[top:bottom,
-                                                     left:right], 1.5) -1)
-        bf_fr = self.scaleFrame(current_bf[top:bottom,
-                                                   left:right], 1)       
+        green_inv_fr = -1*(self.scaleFrame(
+                current_green[top:bottom, left:right],
+                1.2, #FIXME no hidden parameters in code
+                cell_tablet[top:bottom, left:right]) -1)
+        red_inv_fr = -1*(self.scaleFrame(
+                current_red[top:bottom, left:right],
+                1.5, #FIXME no hidden parameters in code
+                cell_tablet[top:bottom, left:right]) -1)
+        bf_fr = self.scaleFrame(
+                current_bf[top:bottom, left:right],
+                1,
+                cell_tablet[top:bottom, left:right])       
         mkr_frame = mkr_tablet[top:bottom,left:right].reshape(
                 bottom-top,right-left,1)
         ctx_frame = ctx_tablet[top:bottom,left:right].reshape(
@@ -625,8 +668,12 @@ class QCframeLib():
                 green_inv_fr, green_inv_fr_mk,
                 red_inv_fr, red_inv_fr_mk,
                 bf_fr, bf_fr_mk), axis=2)       
-    def scaleFrame(self, frame, factor):
-        frame = (frame-np.min(frame)) * factor/(np.max(frame)-np.min(frame))
+    def scaleFrame(self, frame, factor, cellmask, method='max'):
+        if method == 'max':
+            scale_factor = factor/(np.max(frame[cellmask])-np.min(frame))
+        if method == 'median':
+            scale_factor = factor/(3*np.median(frame[cellmask])-np.min(frame))#FIXME no hidden parameters in code
+        frame = (frame-np.min(frame)) * scale_factor
         frame[frame > 1] = 1
         return frame
     def click_cv2_main(self, event, x, y, flags, param):
@@ -745,6 +792,6 @@ class QCframeLib():
                 lastkey = '<'
                 self.qc_start -= self.panel_size
                 self._newPanel()
-            
+        cv2.destroyAllWindows()
         
     

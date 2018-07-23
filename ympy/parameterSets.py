@@ -29,10 +29,10 @@ default_parameter_dict = dict(
         smoothing_kernel_width = 5, #smoothing kernel for histogram calibrated
             #foci-brightness and foci-area measurments
         qc_border_size = 10, #border around cells for qc
-        return_total_results = True #whether measure_GFP_wRFPmarker should
+        return_total_results = True, #whether measure_GFP_wRFPmarker should
             #return results as a variable in addition to saving them
             #(it always saves)
-        )
+        scale_green_frame_method = 'median')
 
 template_GFPwMarker_params = dict(
         folder_path = ('home/user/microscopy/experiment'), # replace this with
