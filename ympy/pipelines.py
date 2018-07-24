@@ -347,6 +347,8 @@ class QualityControlPipeline():
     def __init__(self, results_path, experiment_parameter_dict):
         self.results_path = results_path
         self.Param = YmpyParam(experiment_parameter_dict)
+        self._qc_df_path = self.Param.folder_path + '/results/qc_dataframes.p'
+        self.autosave = True
     def firstTimeStartInPipeline(self):
         self._load_from_total_results_dict()
         self._randomize_results_df()
@@ -381,7 +383,6 @@ class QualityControlPipeline():
                   'working_df' : self.working_df,
                   'accepted_df' : self.accepted_df,
                   'rejected_df' : self.rejected_df}
-        self._qc_df_path = self.Param.folder_path + '/results/qc_dataframes.p'
         pickle.dump(qc_dfs, open(self._qc_df_path, 'wb'))
     def loadPipelineDFs(self):
         qc_dfs = pickle.load(open(self._qc_df_path, 'rb'))
@@ -780,8 +781,10 @@ class QCframeLib():
                 lastkey = 'advanced_panel'
                 # update
                 self._update_results_df_from_panel()
-                self.QCpipe.savePipelineDFs()
-                print('saved; advanced to next panel')
+                if self.QCpipe.autosave:
+                    self.QCpipe.savePipelineDFs()
+                    print('saved; advanced to next panel')
+                else: print('results not saved; advanced to next panel')
                 self.qc_start += self.panel_size
                 self._newPanel()
             if key == ord('>'):
