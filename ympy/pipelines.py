@@ -752,7 +752,7 @@ class QCframeLib():
               '-spacebar to save results and advance to next panel\n'
               '-"<" and ">" to navigate without saving\n'
               '-"q" to quit (with save prompt)'
-              '-"s" to save without quitting
+              '-"s" to save without quitting'
               '-keybindings are for windows, may require edits on other\n'
               'platforms\n\n')
         self._newPanel()
