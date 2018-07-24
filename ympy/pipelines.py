@@ -751,6 +751,8 @@ class QCframeLib():
               '        through '
               '-spacebar to save results and advance to next panel\n'
               '-"<" and ">" to navigate without saving\n'
+              '-"q" to quit (with save prompt)'
+              '-"s" to save without quitting
               '-keybindings are for windows, may require edits on other\n'
               'platforms\n\n')
         self._newPanel()
@@ -795,6 +797,11 @@ class QCframeLib():
                 lastkey = '<'
                 self.qc_start -= self.panel_size
                 self._newPanel()
+            if key == ord('s'):
+                lastkey = 's'
+                print('saving... ', end=''),
+                self.QCpipe.savePipelineDFs()
+                print('\rsaved    ')
         cv2.destroyAllWindows()
         
     
