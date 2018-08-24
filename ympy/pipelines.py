@@ -1,6 +1,6 @@
 ''' 
-ympy bespoke measurement pipelines.
-Follow the examples here to create your own
+ympy measurement pipelines
+
 '''
 
 import pickle
@@ -15,10 +15,13 @@ import cv2
 
 import ympy
 from ympy.parameterSets import YmpyParam
+class Pipeline():
+   def  __init__(self, folder_path, parameter_dictionary):
+        self.folder_path = folder_path
+        self.parameter_dictionary = parameter_dictionary
 
 class GFPwMarkerPipeline():
     
-    #%% run the pipeline main function
     
     def runPipeline(self):
         self.history.append('ran pipeline at ' + str(datetime.datetime.now()))
@@ -73,18 +76,7 @@ class GFPwMarkerPipeline():
               'measureSingleField',
               'saveState'
              ]
-    
-    def help(self):
-        print(' ---ympy pipeline object---\n',
-              'Usage:\n',
-              'Reference and set parameters from Param attribute.\n',
-              'GFPmarkerPipeline.Param.listParamters() to',
-              'view current parameters\n',
-              'GFPmarkerPipeline.runPipeline() to proccess all files in\n',
-              '    GFPmarkerPipeline.Param.target_folder')
-                
-    #%% setup folder    
-    
+        
     def setupResultsfolder(self):    
         print('beginning analysis of \n{}\n at {}'.format(
                 self.Param.folder_path, datetime.datetime.now()))
@@ -94,8 +86,6 @@ class GFPwMarkerPipeline():
             os.makedirs(resultsDirectory)
         self._found_results_folder = True
 
-    #%% measure global values (slow for big datasets)
-    
     def scaleBrightness(self):
         self.checkState('scaleBrightness')
         self.history.append('scaled experiment brightness values')
@@ -113,9 +103,6 @@ class GFPwMarkerPipeline():
                 self.Param.red_channel,
                 self.Param.show_progress)
         self._scaled_brightness = True
-    
-
-    #%% read image with rederHelper and image_reader
     
     def readCurrentField(self):
         # begin tracking current field
@@ -139,8 +126,6 @@ class GFPwMarkerPipeline():
         self._made_masks = False
         self._measured = False
         self._saved = False
-        
-    #%% find cells and cleanup morphology
         
     def segmentImage(self):
         self.checkState('segmentImage')
@@ -175,8 +160,6 @@ class GFPwMarkerPipeline():
                         self.ncells,
                         self.current_field))
         self._segmented_image = True
-
-    #%% define measurment masks
     
     def buildMeasurementMasks(self):
         self.checkState('buildMeasurementMasks')
@@ -201,14 +184,14 @@ class GFPwMarkerPipeline():
         full_cortex_mcl = ympy.merge_labelMcl(
                 inner_cortex_mcl,
                 buffer)
-        # use Otsu thresholding on the max projection of RFPmarker
-        marker_mcl_otsu = ympy.labelMaxproj(
+        # per-cell yen thresholding on the max projection of RFPmarker
+        marker_mcl = ympy.labelMaxprojByCell(
                 self.buffered_master_cell_label,
                 self.image,
                 self.Param.marker_channel)
         # then use centroidCircles to uniformly mask peri-golgi regions
         marker_mcl_ccadjusted = ympy.centroidCirclesMcl( 
-                marker_mcl_otsu.astype('bool'), 
+                marker_mcl.astype('bool'), 
                 self.buffered_master_cell_label,
                 self.Param.marker_radius, 
                 self.Param.marker_circle_iterations)
@@ -240,8 +223,6 @@ class GFPwMarkerPipeline():
                         self.unbuffered_master_cell_label.astype(bool)
                 }
         self._made_masks = True
-        
-        #%% measure
         
     def measureSingleField(self):
         self.checkState('measureSingleField')
@@ -275,8 +256,6 @@ class GFPwMarkerPipeline():
                               + str(self.current_field))
         self.totalResults = list(np.concatenate((self.totalResults, results)))
         self._measured = True
-        
-    #%% pool and save
 
     def saveState(self):
         self.checkState('saveState')
@@ -303,7 +282,6 @@ class GFPwMarkerPipeline():
               ' complete at ', datetime.datetime.now())
         self._saved = True
     
-    #%% helper methods
     def checkState(self, state_function_name):
         state = [self._found_results_folder,
                  self._scaled_brightness,
@@ -332,7 +310,6 @@ class GFPwMarkerPipeline():
                               'initialize analysis of a new field'.format(
                                       self.current_field))
                 raise Exception(error_text)
-                
     
     def analyzeRange(self):
         if self.Param.measure_fields == 'all':
@@ -344,18 +321,22 @@ class GFPwMarkerPipeline():
         return(start, stop)
 
 class QualityControlPipeline():
+    
     def __init__(self, results_path, experiment_parameter_dict):
         self.results_path = results_path
         self.Param = YmpyParam(experiment_parameter_dict)
         self._qc_df_path = self.Param.folder_path + '/results/qc_dataframes.p'
         self.autosave = True
+    
     def firstTimeStartInPipeline(self):
         self._load_from_total_results_dict()
         self._randomize_results_df()
         self._setup_working_dfs()
+    
     def resumeInPipeline(self):
         self._load_from_total_results_dict()
         self._setup_working_dfs()
+    
     def _load_from_total_results_dict(self):
         total_results_dict = pickle.load(open(self.results_path, 'rb'))
         self.total_mcl = total_results_dict['totalMcl']
@@ -368,26 +349,31 @@ class QualityControlPipeline():
         # assemble dataframes
         # results_df is the top level dataframe
         self.results_df = pd.DataFrame(total_results_dict['totalResults'])
+    
     def _randomize_results_df(self):
         random_idx = list(range(len(self.results_df)))
         random.shuffle(random_idx, random.seed(self.results_path))        
         self.results_df = self.results_df.assign(randomIdx = random_idx)
+   
     def _setup_working_dfs(self):
         # working, accepted and rejected for sorting cells during qc
         self.working_df = pd.DataFrame({})
         self.accepted_df = pd.DataFrame({})
         self.rejected_df = pd.DataFrame({})
         self.sortQCDF()
+    
     def savePipelineDFs(self):
         qc_dfs = {'results_df' : self.results_df,
                   'working_df' : self.working_df,
                   'accepted_df' : self.accepted_df,
                   'rejected_df' : self.rejected_df}
         pickle.dump(qc_dfs, open(self._qc_df_path, 'wb'))
+    
     def loadPipelineDFs(self):
         qc_dfs = pickle.load(open(self._qc_df_path, 'rb'))
         for k, v in qc_dfs.items():
             setattr(self, k, v)
+    
     def prefilterQC(self):
         no_cytoplasm_mask = self.results_df['cytoplasm_area'] == 0  
         self.results_df.loc[no_cytoplasm_mask, 'qcStatus'] = 'autorejected'
@@ -399,6 +385,7 @@ class QualityControlPipeline():
         self.history.append('autorejected {} cells with zero area marker or'
                             ' cytoplasm masks'.format(n_rejected))
         self.sortQCDF()
+    
     def sortQCDF(self):
         work_locs = self.results_df['qcStatus'].str.contains('unreviewed')
         accepted_locs = self.results_df['qcStatus'].str.contains('accepted')
@@ -408,20 +395,24 @@ class QualityControlPipeline():
         self.working_df = self.results_df[work_locs]
         self.accepted_df = self.results_df[accepted_locs]
         self.rejected_df = self.results_df[rejected_locs | autorejected_locs]
+    
     def callQCframeLib(self, *args):
         self.QCframeLib = QCframeLib(self, *args)
+    
     def expandExpIDs(self, use_expid_headers='none'):
         # map dictionary in parameters to expID in results df
-        labels = self.results_df.map(self.Param.expid_lookup).values.tolist()
-        if 'column_names' in self.Param.expid_lookup:
+        labels = self.results_df['expID'].map(
+                self.Param.expid_lookup).values.tolist()
+        if 'column_names' in self.Param.expid_lookup: #TODO fix bug where expandExpIDs crashes if some expIDs present on image names are not coded in the expid_lookup dictionary
             label_names = self.Param.expid_lookup['column_names']
         else: label_names = use_expid_headers
-        self.results_df.join(pd.DataFrame(labels,
-                                          index=self.results_df.index,
-                                          columns=label_names))
+        self.results_df = self.results_df.join(
+                pd.DataFrame(labels,
+                             index=self.results_df.index,
+                             columns=label_names))
         # expand experiment labels for checking consistency between each 
         # experiment
-        topdirs = [(d.path) for d in os.scandir(self.Params.folder_path)
+        topdirs = [(d.path) for d in os.scandir(self.Param.folder_path)
                    if d.is_dir()]
         experiment_list = []
         for fieldIdx in self.results_df['fieldIdx']:
@@ -430,7 +421,7 @@ class QualityControlPipeline():
                 if os.path.commonpath((d,path)) == os.path.abspath(d):
                     experiment_list.append((idx, os.path.basename(d)))
         if len(experiment_list) == len(self.results_df):
-            self.results.df = self.results_df.join(
+            self.results_df = self.results_df.join(
                     pd.DataFrame(experiment_list,
                                  index=self.results_df.index,
                                  columns=['exp_number',
@@ -537,8 +528,10 @@ class QCframeLib():
                 self.QCpipe.Param.folder_path, date_today)
         pickle.dump(self.framelib, open(save_path, 'wb'))
         print()
+    
     def loadLibrary(self, library_path):
         self.framelib = pickle.load(open(library_path, 'rb'))
+   
     def assembleNewQCPage(self):
         #make blank page according to array size
         row_size = self.array_size[1]*self.frame_size
@@ -552,6 +545,7 @@ class QCframeLib():
             idx_frame = np.ones(2*[self.frame_size], dtype=int)*int(idx)
             self.qcpage = self.placeFrame(row, col, qc_frame, self.qcpage)
             self.idxpage = self.placeFrame(row, col, idx_frame, self.idxpage)
+    
     def assembleBaseFrame(self, df_idx):
         cortexmask = self.framelib.loc[df_idx,'cortexmask'].toarray()
         markermask = self.framelib.loc[df_idx,'markermask'].toarray()
@@ -575,12 +569,14 @@ class QCframeLib():
         blue = blue.reshape(self.frame_size, self.frame_size, 1)
         base_image = np.concatenate((blue, green, red), axis=2)
         return base_image
+
     def assembleGrayFrame(self, df_idx):
         base_image = self.assembleBaseFrame(df_idx)
         gray_frame = np.max(base_image, axis=2)
         gray = gray_frame.reshape(self.frame_size, self.frame_size, 1)
         gray_image = np.concatenate(3*[gray], axis=2)
         return gray_image
+
     def assembleColoredFrame(self, df_idx):
         base_image = self.assembleBaseFrame(df_idx)
         gray_image = self.assembleGrayFrame(df_idx)
@@ -590,6 +586,7 @@ class QCframeLib():
         colored_cell_image = np.array(gray_image)
         colored_cell_image[colormask_image] = base_image[colormask_image]
         return colored_cell_image        
+
     def placeFrame(self, row, col, frame, page):
         if len(page.shape) == 3: is_rgb = True
         else: is_rgb = False
@@ -603,6 +600,7 @@ class QCframeLib():
         else:
             page[top:bottom, left:right] = frame
         return page
+
     def assembleDetails(self, df_idx):
         current_field_idx = self.QCpipe.results_df.loc[df_idx, 'fieldIdx']
         cell_lbl = self.QCpipe.results_df.loc[df_idx, 'localLbl']
@@ -669,6 +667,7 @@ class QCframeLib():
                 green_inv_fr, green_inv_fr_mk,
                 red_inv_fr, red_inv_fr_mk,
                 bf_fr, bf_fr_mk), axis=2)       
+
     def scaleFrame(self, frame, factor, cellmask, method='max'):
         if method == 'max':
             scale_factor = factor/(np.max(frame[cellmask])-np.min(frame))
@@ -677,6 +676,7 @@ class QCframeLib():
         frame = (frame-np.min(frame)) * scale_factor
         frame[frame > 1] = 1
         return frame
+
     def click_cv2_main(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
             idx_click = self.idxpage[y,x]
@@ -697,12 +697,14 @@ class QCframeLib():
             idx_click = self.idxpage[y,x]
             df_idx_click = self.qcIdxSeries.iloc[idx_click]
             self.assembleDetails(df_idx_click)
+            
     def click_cv2_details(self, event, x, y, flags, param):
         modulus = self.details_frame.shape[2]
         if event == cv2.EVENT_LBUTTONDOWN:
             self.details_idx = (self.details_idx + 1) % modulus
         if event == cv2.EVENT_MBUTTONDOWN:
             self.details_idx = (self.details_idx - 1) % modulus
+            
     def _newPanel(self):
         self._get_next_randIdxes()
         self.assembleNewQCPage()
@@ -724,15 +726,18 @@ class QCframeLib():
                       status,
                       self.QCpipe.results_df.qcStatus.str.contains(
                               'unreviewed').sum()))
+        
     def _get_next_randIdxes(self):
         self.qcIdxSeries = pd.Series(self.QCpipe.working_df.sort_values(
                 by='randomIdx').iloc[
                     self.qc_start : self.qc_start+self.panel_size].index)
+            
     def _update_results_df_from_panel(self):
         accept_mask = self.qcIdxSeries[~self._clickerstatus] 
         reject_mask = self.qcIdxSeries[self._clickerstatus]
         self.QCpipe.results_df.loc[accept_mask, 'qcStatus'] = 'accepted'
         self.QCpipe.results_df.loc[reject_mask, 'qcStatus'] = 'rejected'
+        
     def displayForQC(self):
         cv2.namedWindow('qc_window', cv2.WINDOW_NORMAL)
         cv2.namedWindow('details_window', cv2.WINDOW_NORMAL)
@@ -751,8 +756,8 @@ class QCframeLib():
               '        through '
               '-spacebar to save results and advance to next panel\n'
               '-"<" and ">" to navigate without saving\n'
-              '-"q" to quit (with save prompt)'
-              '-"s" to save without quitting'
+              '-"q" to quit (with save prompt)\n'
+              '-"s" to save without quitting\n'
               '-keybindings are for windows, may require edits on other\n'
               'platforms\n\n')
         self._newPanel()
@@ -783,12 +788,12 @@ class QCframeLib():
                 lastkey = 'advanced_panel'
                 # update
                 self._update_results_df_from_panel()
+                self.qc_start += self.panel_size
+                self._newPanel()
                 if self.QCpipe.autosave:
                     self.QCpipe.savePipelineDFs()
                     print('saved; advanced to next panel')
                 else: print('results not saved; advanced to next panel')
-                self.qc_start += self.panel_size
-                self._newPanel()
             if key == ord('>'):
                 lastkey = '>'
                 self.qc_start += self.panel_size
