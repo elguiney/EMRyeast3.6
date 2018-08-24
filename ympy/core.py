@@ -18,6 +18,7 @@ import scipy.ndimage as ndimage
 from skimage.measure import regionprops
 from skimage import draw
 from skimage.filters import threshold_otsu
+import skimage
 import skimage.morphology as morph
 
 from ympy.helpers import progressBar_text, progressSpinner_text, readerHelper
@@ -520,6 +521,28 @@ def labelCortex_mcl(masterCellLabel, cortexWidth):
         erosion = ndimage.binary_erosion(erosion, morph.disk(cortexWidth))
         cortexMcl[erosion] = 0
     return cortexMcl
+
+def labelMaxprojByCell(masterCellLabel, image, mkrChannel):
+    '''
+    experimental version of colocalization marker label;
+    uses Yens's threshold of maximum projection of marker stack, but computes
+    throshold separately for each cell; assumes insubstantial photobleaching
+    '''
+    mkrZstk = image[mkrChannel,:,:,:]
+    mkrMaxProj = np.amax(mkrZstk,axis=0)
+    mkrBool = np.zeros(masterCellLabel.shape, dtype='int16')
+    ncells = np.max(masterCellLabel)
+    for cell in range(ncells):
+        cellLbl = cell + 1
+        intensities = mkrMaxProj[np.abs(masterCellLabel) == cellLbl]
+        localthreshold = skimage.filters.threshold_yen(intensities)
+        mask = ((mkrMaxProj > localthreshold) 
+                & (np.abs(masterCellLabel) == cellLbl))
+        mkrBool[mask] = 1
+    mkrBool = ndimage.binary_closing(ndimage.binary_opening(mkrBool))
+    mkrMcl = np.zeros(masterCellLabel.shape, dtype='int16')
+    mkrMcl[mkrBool] = masterCellLabel[mkrBool]
+    return mkrMcl
 
 def labelMaxproj(masterCellLabel, image, mkrChannel):
     '''
