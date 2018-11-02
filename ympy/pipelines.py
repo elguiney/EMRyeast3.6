@@ -76,6 +76,10 @@ class GFPwMarkerPipeline():
               'measureSingleField',
               'saveState'
              ]
+        # save path
+        date_today = str(datetime.datetime.now().date())
+        self.save_path = '{}/results/{}_analysis.p'.format(
+                self.Param.folder_path, date_today)
         
     def setupResultsfolder(self):    
         print('beginning analysis of \n{}\n at {}'.format(
@@ -274,10 +278,7 @@ class GFPwMarkerPipeline():
                 'object_history': self.history,
                 'total_bool_masks': self.total_bool_masks
                 }
-        date_today = str(datetime.datetime.now().date())
-        save_path = '{}/results/{}_analysis.p'.format(
-                self.Param.folder_path, date_today)
-        pickle.dump(resultsDic, open(save_path, 'wb'))
+        pickle.dump(resultsDic, open(self.save_path, 'wb'))
         print(self.folder_data['imagename_list'][self.current_field],
               ' complete at ', datetime.datetime.now())
         self._saved = True
